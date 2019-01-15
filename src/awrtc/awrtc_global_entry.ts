@@ -1,5 +1,4 @@
-BSD 3-Clause License
-
+/*
 Copyright (c) 2019, because-why-not.com Limited
 All rights reserved.
 
@@ -27,3 +26,18 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+//obsolete. not needed for unity build anymore
+//special entry point only needed for backwards compatibility
+//it will merge awrtc namespace into window so old code still works
+//that accesses objects directly instead using the global awrtc object
+//the index will include all external modules
+import * as awrtc from "./index"
+
+//we merge awrtc into the global namespace
+Object.assign(window, awrtc);
+
+//for less risky global access 
+(window as any).awrtc = awrtc;
+
+console.debug("loading awrtc modules completed");

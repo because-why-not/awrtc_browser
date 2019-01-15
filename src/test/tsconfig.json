@@ -1,0 +1,23 @@
+{
+  "extends": "../awrtc/tsconfig_base",
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "noEmitOnError": true,
+    "removeComments": false,
+    "sourceMap": true,
+    "target": "es5",
+    "module": "es2015",
+    "declaration": false,
+    "outDir": "../build/test",
+    "baseUrl": "."
+  },
+  "files": [
+    "./helper/BasicNetworkTestBase.ts",
+    "./helper/IBasicNetworkTest.ts",
+    "WebsocketNetworkTest.ts",
+    "WebRtcNetworkTest.ts",
+    "CallTest.ts",
+    "LocalNetworkTest.ts",
+    "MediaNetworkTest.ts"
+  ]
+}

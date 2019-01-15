@@ -1,0 +1,286 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <script src="./bundle/awrtc.js"></script>
+
+</head>
+<body>
+    <div id="callapp1">
+        <h1>Callapp1:</h1>
+        URL to connect:
+        <p class="callapp_url">
+    
+        </p>
+        <input type="checkbox" name="audio" class="callapp_send_audio" checked autocomplete="off"> Audio
+        <input type="checkbox" name="video" class="callapp_send_video" checked autocomplete="off"> Video
+        <input type= "text" class="callapp_address" autocomplete="off">
+        <button class="callapp_button"> Start / Stop </button>
+        <div class="callapp_local_video">local video</div>
+        <div class="callapp_remote_video">remote video</div>
+    </div>
+
+
+    <script> 
+//everything below is just the callapp.ts compiled to js without the "export" key word
+//the inclusion of the ./bundle/awrtc.js above will make the interface available via
+//the global variable "awrtc"
+class CallApp {
+    constructor() {
+        this.mNetConfig = new awrtc.NetworkConfig();
+        this.mCall = null;
+        //update loop
+        this.mIntervalId = -1;
+        this.mLocalVideo = null;
+        this.mRemoteVideo = {};
+        this.mIsRunning = false;
+        this.OnStartStopButtonClicked = () => {
+            if (this.mIsRunning) {
+                this.Stop();
+            }
+            else {
+                this.Start(this.mAddress, this.mVideo, this.mAudio);
+            }
+        };
+        this.OnUiUpdate = () => {
+            console.debug("OnUiUpdate");
+            this.mAddress = this.mUiAddress.value;
+            this.mAudio = this.mUiAudio.checked;
+            this.mVideo = this.mUiVideo.checked;
+            this.mUiUrl.innerHTML = this.GetUrl();
+        };
+        this.mNetConfig.IceServers = [
+            { urls: "stun:stun.because-why-not.com:443" },
+            { urls: "stun:stun.l.google.com:19302" }
+        ];
+        //use for testing conferences 
+        //this.mNetConfig.IsConference = true;
+        //this.mNetConfig.SignalingUrl = "wss://signaling.because-why-not.com/testshared";
+        this.mNetConfig.IsConference = false;
+        this.mNetConfig.SignalingUrl = "wss://signaling.because-why-not.com/callapp";
+    }
+    setupUi(parent) {
+        this.mUiAddress = parent.querySelector(".callapp_address");
+        this.mUiAudio = parent.querySelector(".callapp_send_audio");
+        this.mUiVideo = parent.querySelector(".callapp_send_video");
+        this.mUiUrl = parent.querySelector(".callapp_url");
+        this.mUiButton = parent.querySelector(".callapp_button");
+        this.mUiLocalVideoParent = parent.querySelector(".callapp_local_video");
+        this.mUiRemoteVideoParent = parent.querySelector(".callapp_remote_video");
+        this.mUiAudio.onclick = this.OnUiUpdate;
+        this.mUiVideo.onclick = this.OnUiUpdate;
+        this.mUiAddress.onkeyup = this.OnUiUpdate;
+        this.mUiButton.onclick = this.OnStartStopButtonClicked;
+        //set default value + make string "true"/"false" to proper booleans
+        this.mAudio = this.GetParameterByName("audio");
+        this.mAudio = this.tobool(this.mAudio, true);
+        this.mVideo = this.GetParameterByName("video");
+        this.mVideo = this.tobool(this.mVideo, true);
+        this.mAutostart = this.GetParameterByName("autostart");
+        this.mAutostart = this.tobool(this.mAutostart, false);
+        this.mAddress = this.GetParameterByName("a");
+        //if autostart is set but no address is given -> create one and reopen the page
+        if (this.mAddress === null && this.mAutostart == true) {
+            this.mAddress = this.GenerateRandomKey();
+            window.location.href = this.GetUrlParams();
+        }
+        else {
+            if (this.mAddress === null)
+                this.mAddress = this.GenerateRandomKey();
+            this.UpdateUi();
+        }
+        //used for interacting with the Unity CallApp
+        //current hack to get the html element delivered. by default this
+        //just the image is copied and given as array
+        //Lazy frames will be the default soon though
+        if (this.mAutostart) {
+            console.log("Starting automatically ... ");
+            this.Start(this.mAddress, this.mAudio, this.mVideo);
+        }
+        console.log("address: " + this.mAddress + " audio: " + this.mAudio + " video: " + this.mVideo + " autostart: " + this.mAutostart);
+    }
+    GetParameterByName(name) {
+        var url = window.location.href;
+        name = name.replace(/[\[\]]/g, "\\$&");
+        var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"), results = regex.exec(url);
+        if (!results)
+            return null;
+        if (!results[2])
+            return '';
+        return decodeURIComponent(results[2].replace(/\+/g, " "));
+    }
+    tobool(value, defaultval) {
+        if (value === true || value === "true")
+            return true;
+        if (value === false || value === "false")
+            return false;
+        return defaultval;
+    }
+    GenerateRandomKey() {
+        var result = "";
+        for (var i = 0; i < 7; i++) {
+            result += String.fromCharCode(65 + Math.round(Math.random() * 25));
+        }
+        return result;
+    }
+    GetUrlParams() {
+        return "?a=" + this.mAddress + "&audio=" + this.mAudio + "&video=" + this.mVideo + "&" + "autostart=" + true;
+    }
+    GetUrl() {
+        return location.protocol + '//' + location.host + location.pathname + this.GetUrlParams();
+    }
+    UpdateUi() {
+        console.log("UpdateUi");
+        this.mUiAddress.value = this.mAddress;
+        this.mUiAudio.checked = this.mAudio;
+        this.mUiVideo.checked = this.mVideo;
+        this.mUiUrl.innerHTML = this.GetUrl();
+    }
+    Start(address, audio, video) {
+        if (this.mCall != null)
+            this.Stop();
+        console.log("start");
+        console.log("Using signaling server url: " + this.mNetConfig.SignalingUrl);
+        //create media configuration
+        var config = new awrtc.MediaConfig();
+        config.Audio = audio;
+        config.Video = video;
+        config.IdealWidth = 640;
+        config.IdealHeight = 480;
+        config.IdealFps = 30;
+        config.FrameUpdates = false;
+        console.log("requested config:" + JSON.stringify(config));
+        //setup our high level call class.
+        this.mCall = new awrtc.BrowserWebRtcCall(this.mNetConfig);
+        //handle events (get triggered after Configure / Listen call)
+        //+ugly lahmda to avoid loosing "this" reference
+        this.mCall.addEventListener((sender, args) => {
+            this.OnNetworkEvent(sender, args);
+        });
+        //As the system is designed for realtime graphics we have to call the Update method. Events are only
+        //triggered during this Update call!
+        this.mIntervalId = setInterval(() => {
+            this.Update();
+        }, 50);
+        //configure media. This will request access to media and can fail if the user doesn't have a proper device or
+        //blocks access
+        this.mCall.Configure(config);
+        //Try to listen to the address 
+        //Conference mode = everyone listening will connect to each other
+        //Call mode -> If the address is free it will wait for someone else to connect
+        //          -> If the address is used then it will fail to listen and then try to connect via Call(address);
+        this.mCall.Listen(address);
+    }
+    Stop() {
+        if (this.mCall != null) {
+            this.mCall.Dispose();
+            this.mCall = null;
+            clearInterval(this.mIntervalId);
+            this.mIntervalId = -1;
+        }
+    }
+    Update() {
+        if (this.mCall != null)
+            this.mCall.Update();
+    }
+    OnNetworkEvent(sender, args) {
+        //User gave access to requiested camera/ micrphone
+        if (args.Type == awrtc.CallEventType.ConfigurationComplete) {
+            console.log("configuration complete");
+        }
+        /*
+        else if (args.Type == awrtc.CallEventType.FrameUpdate) {
+            //frame updated. For unity this needs to be called every frame to deliver
+            //the byte array but for the browser we get the internally used video element
+            //for now. (this system will probably change in the future)
+            let frameUpdateArgs = args as awrtc.FrameUpdateEventArgs;
+            var lazyFrame = frameUpdateArgs.Frame as LazyFrame;
+            if (this.mLocalVideo == null && frameUpdateArgs.ConnectionId == awrtc.ConnectionId.INVALID) {
+
+                let videoElement = lazyFrame.FrameGenerator.VideoElement;
+                this.mLocalVideo = videoElement;
+                this.mUiLocalVideoParent.appendChild(videoElement);
+                console.log("local video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
+
+            }
+            else if (frameUpdateArgs.ConnectionId != awrtc.ConnectionId.INVALID && this.mRemoteVideo[frameUpdateArgs.ConnectionId.id] == null) {
+                
+                var videoElement = lazyFrame.FrameGenerator.VideoElement;
+                this.mRemoteVideo[frameUpdateArgs.ConnectionId.id] = videoElement;
+                this.mUiRemoteVideoParent.appendChild(videoElement);
+                console.log("remote video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
+            }
+        }
+        */
+        else if (args.Type == awrtc.CallEventType.MediaUpdate) {
+            let margs = args;
+            if (this.mLocalVideo == null && margs.ConnectionId == awrtc.ConnectionId.INVALID) {
+                var videoElement = margs.VideoElement;
+                this.mLocalVideo = videoElement;
+                this.mUiLocalVideoParent.appendChild(videoElement);
+                console.log("local video added resolution:" + videoElement.videoWidth + videoElement.videoHeight + " fps: ??");
+            }
+            else if (margs.ConnectionId != awrtc.ConnectionId.INVALID && this.mRemoteVideo[margs.ConnectionId.id] == null) {
+                var videoElement = margs.VideoElement;
+                this.mRemoteVideo[margs.ConnectionId.id] = videoElement;
+                this.mUiRemoteVideoParent.appendChild(videoElement);
+                console.log("remote video added resolution:" + videoElement.videoWidth + videoElement.videoHeight + " fps: ??");
+            }
+        }
+        else if (args.Type == awrtc.CallEventType.ListeningFailed) {
+            //First attempt of this example is to try to listen on a certain address
+            //for confernce calls this should always work (expect the internet is dead)
+            if (this.mNetConfig.IsConference == false) {
+                //no conference call and listening failed? someone might have claimed the address.
+                //Try to connect to existing call
+                this.mCall.Call(this.mAddress);
+            }
+            else {
+                console.error("Listening failed. Server dead?");
+            }
+        }
+        else if (args.Type == awrtc.CallEventType.ConnectionFailed) {
+            //Outgoing call failed entirely. This can mean there is no address to connect to,
+            //server is offline, internet is dead, firewall blocked access, ...
+            alert("connection failed");
+        }
+        else if (args.Type == awrtc.CallEventType.CallEnded) {
+            //call endet or was disconnected
+            var callEndedEvent = args;
+            console.log("call ended with id " + callEndedEvent.ConnectionId.id);
+            //document.body.removeChild(mRemoteVideo[callEndedEvent.ConnectionId.id]);
+            //remove properly
+            this.mRemoteVideo[callEndedEvent.ConnectionId.id] = null;
+        }
+        else if (args.Type == awrtc.CallEventType.Message) {
+            let messageArgs = args;
+            this.mCall.Send(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
+        }
+        else if (args.Type == awrtc.CallEventType.DataMessage) {
+            let messageArgs = args;
+            this.mCall.SendData(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
+        }
+        else {
+            console.log("Unhandled event: " + args.Type);
+        }
+    }
+}
+function callapp(parent) {
+    let callApp;
+    console.log("init callapp");
+    if (parent == null) {
+        console.log("parent was null");
+        parent = document.body;
+    }
+    awrtc.SLog.SetLogLevel(awrtc.SLogLevel.Info);
+    callApp = new CallApp();
+    callApp.setupUi(parent);
+}
+        callapp(document.querySelector("#callapp1"));
+
+//examples.CAPIWebRtcNetwork_minimal();
+
+    </script>
+</body>
+</html>

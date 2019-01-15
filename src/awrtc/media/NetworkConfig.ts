@@ -1,5 +1,4 @@
-BSD 3-Clause License
-
+﻿/*
 Copyright (c) 2019, because-why-not.com Limited
 All rights reserved.
 
@@ -27,3 +26,34 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+export class NetworkConfig {
+
+    private mIceServers = new Array<RTCIceServer>();
+
+    public get IceServers(): RTCIceServer[] {
+        return this.mIceServers;
+    }
+
+    public set IceServers(value: RTCIceServer[]) {
+        this.mIceServers = value;
+    }
+
+    private mSignalingUrl = "ws://because-why-not.com:12776";
+    public get SignalingUrl() {
+        return this.mSignalingUrl;
+    }
+
+    public set SignalingUrl(value: string) {
+        this.mSignalingUrl = value;
+    }
+
+    private mIsConference = false;
+    public get IsConference(): boolean {
+        return this.mIsConference;
+    }
+    public set IsConference(value:boolean) {
+        this.mIsConference = value;
+    }
+}

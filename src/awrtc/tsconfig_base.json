@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "noEmitOnError": true,
+    "removeComments": false,
+    "sourceMap": true,
+    "declaration": false,
+    "baseUrl": ".",
+    "esModuleInterop": true
+  },
+  "exclude": [
+    "node_modules",
+    "wwwroot"
+  ],
+  "files": [
+    "./network/Helper.ts",
+    "./network/INetwork.ts",
+    "./network/WebRtcNetwork.ts",
+    "./network/WebRtcPeer.ts",
+    "./network/WebsocketNetwork.ts",
+    "./network/LocalNetwork.ts",
+    "./network/index.ts",
+    "./media/CallEventArgs.ts",
+    "./media/ICall.ts",
+    "./media/IMediaNetwork.ts",
+    "./media/MediaConfig.ts",
+    "./media/NetworkConfig.ts",
+    "./media/RawFrame.ts",
+    "./media/AWebRtcCall.ts",
+    "./media/index.ts",
+    "./media_browser/BrowserMediaNetwork.ts",
+    "./media_browser/BrowserWebRtcCall.ts",
+    "./media_browser/BrowserMediaStream.ts",
+    "./media_browser/MediaPeer.ts",
+    "./media_browser/index.ts",
+    "./unity/CAPI.ts",
+    "./unity/index.ts",
+    "./index.ts"
+  ]
+}

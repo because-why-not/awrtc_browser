@@ -1,0 +1,17 @@
+{
+  "extends": "../awrtc/tsconfig_base",
+  "compilerOptions": {
+   "declaration": false,
+    "target": "es6",
+    "module": "es2015",
+    "outDir": "../../build/apps",
+    "lib": [
+      "es2015",
+      "dom"
+    ]
+  },
+  "files": [
+    "callapp.ts"
+  ]
+
+}

@@ -1,5 +1,4 @@
-BSD 3-Clause License
-
+/*
 Copyright (c) 2019, because-why-not.com Limited
 All rights reserved.
 
@@ -27,3 +26,11 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+export * from './INetwork'
+export * from './Helper'
+export * from './WebRtcPeer'
+export * from './WebRtcNetwork'
+export * from './WebsocketNetwork'
+export * from './LocalNetwork'

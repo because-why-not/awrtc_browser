@@ -1,5 +1,4 @@
-BSD 3-Clause License
-
+/*
 Copyright (c) 2019, because-why-not.com Limited
 All rights reserved.
 
@@ -27,3 +26,9 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+import * as apps from "./index"
+import * as awrtc from "../awrtc/index"
+
+(window as any).awrtc = awrtc;
+(window as any).apps = apps;

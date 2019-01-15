@@ -1,5 +1,4 @@
-BSD 3-Clause License
-
+﻿/*
 Copyright (c) 2019, because-why-not.com Limited
 All rights reserved.
 
@@ -27,3 +26,35 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+import { AWebRtcCall } from "../media/AWebRtcCall";
+import { NetworkConfig } from "../media/NetworkConfig";
+import { IMediaNetwork } from "../media/IMediaNetwork";
+import { BrowserMediaNetwork } from "./BrowserMediaNetwork";
+
+/**Browser version of the C# version of WebRtcCall. 
+ * 
+ * See ICall interface for detailed documentation. 
+ * BrowserWebRtcCall mainly exists to allow other versions 
+ * in the future that might build on a different IMediaNetwork
+ * interface (Maybe something running inside Webassembly?).
+ */
+export class BrowserWebRtcCall extends AWebRtcCall {
+    public constructor(config: NetworkConfig) {
+        super(config);
+        this.Initialize(this.CreateNetwork());
+    }
+
+    private CreateNetwork(): IMediaNetwork {
+
+        return new BrowserMediaNetwork(this.mNetworkConfig);
+    }
+    protected DisposeInternal(disposing: boolean): void {
+        super.DisposeInternal(disposing);
+        if (disposing) {
+            if (this.mNetwork != null)
+                this.mNetwork.Dispose();
+            this.mNetwork = null;
+        }
+    }
+}

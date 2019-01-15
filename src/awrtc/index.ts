@@ -1,5 +1,4 @@
-BSD 3-Clause License
-
+/*
 Copyright (c) 2019, because-why-not.com Limited
 All rights reserved.
 
@@ -27,3 +26,20 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+console.debug("loading awrtc modules ...");
+//this should trigger webpack to include
+//the webrtc adapter.js. It changes the 
+//global WebRTC calls and adds backwards
+//and browser compatibility.
+declare function require(moduleName: string)
+let adapter  = require("webrtc-adapter");
+
+export * from "./network/index"
+export * from "./media/index"
+//for simplicity browser and unity are merged here
+//it could as well be built and deployed separately
+export * from "./media_browser/index"
+export * from "./unity/index"
+console.debug("loading awrtc modules completed");
