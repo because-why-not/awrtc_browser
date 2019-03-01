@@ -165,7 +165,7 @@ export class CallApp
 
             this.Stop();
         }else{
-            this.Start(this.mAddress, this.mVideo , this.mAudio );
+            this.Start(this.mAddress, this.mAudio, this.mVideo);
         }
 
     }

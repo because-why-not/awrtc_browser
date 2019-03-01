@@ -139,6 +139,10 @@ export class BrowserMediaStream {
         SLog.L("video element created. video tracks: " + this.mStream.getVideoTracks().length);
         this.mVideoElement.onloadedmetadata = (e) => {
 
+            //we might have shutdown everything by now already
+            if(this.mVideoElement == null)
+                return;
+
             this.mVideoElement.play();
             if(this.InternalStreamAdded != null)
                 this.InternalStreamAdded(this);
