@@ -125,7 +125,7 @@ interface IRemoteVideoDict {
 class MinimalCall
 {
     //just a number we give each local call to
-    //identify the output of each indivudal call
+    //identify the output of each individual call
     mId:number = -1;
     mCall: awrtc.BrowserWebRtcCall = null;
     mLocalVideo: HTMLVideoElement = null;
@@ -168,11 +168,12 @@ class MinimalCall
 
     private OnCallEvent(sender: any, args: awrtc.CallEventArgs)
     {
-
+        
         if (args.Type == awrtc.CallEventType.ConfigurationComplete) {
             console.log("configuration complete");
             this.mCall.Listen(this.mAddress);
-        } else if (args.Type == awrtc.CallEventType.FrameUpdate) {
+        }/* Old system. not used anymore
+         else if (args.Type == awrtc.CallEventType.FrameUpdate) {
 
             let frameUpdateArgs = args as awrtc.FrameUpdateEventArgs;
             if (this.mLocalVideo == null && frameUpdateArgs.ConnectionId == awrtc.ConnectionId.INVALID) {
@@ -190,7 +191,28 @@ class MinimalCall
                 this.mRemoteVideo[frameUpdateArgs.ConnectionId.id] = lazyFrame.FrameGenerator.VideoElement;
                 this.mDiv.appendChild(this.mRemoteVideo[frameUpdateArgs.ConnectionId.id]);
             }
-        } else if (args.Type == awrtc.CallEventType.ListeningFailed) {
+        }*/
+        else if (args.Type == awrtc.CallEventType.MediaUpdate) {
+            
+            let margs = args as awrtc.MediaUpdatedEventArgs;
+            if (this.mLocalVideo == null && margs.ConnectionId == awrtc.ConnectionId.INVALID) {
+
+                var videoElement = margs.VideoElement;
+                this.mLocalVideo = videoElement;
+                this.mDiv.innerHTML += "local video: " + "<br>";
+                this.mDiv.appendChild(videoElement);
+                console.log("local video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
+
+            }
+            else if (margs.ConnectionId != awrtc.ConnectionId.INVALID && this.mRemoteVideo[margs.ConnectionId.id] == null) {
+                
+                var videoElement = margs.VideoElement;
+                this.mRemoteVideo[margs.ConnectionId.id] = videoElement;
+                this.mDiv.innerHTML += "remote " + this.mId + "<br>";
+                this.mDiv.appendChild(videoElement);
+                console.log("remote video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
+            }
+        }else if (args.Type == awrtc.CallEventType.ListeningFailed) {
             if (this.mNetConfig.IsConference == false) {
 
                 //in 1 to 1 calls there is a listener and a caller
@@ -242,9 +264,11 @@ export function BrowserWebRtcCall_minimal() {
     let mediaConfigSender = new awrtc.MediaConfig();
     mediaConfigSender.Video = true;
     mediaConfigSender.Audio = true;
+    mediaConfigSender.FrameUpdates = false;
     let mediaConfigReceiver = new awrtc.MediaConfig();
     mediaConfigReceiver.Video = false;
     mediaConfigReceiver.Audio = false;
+    mediaConfigReceiver.FrameUpdates = false;
 
     //random key so we don't mistakenly connect
     //to another user

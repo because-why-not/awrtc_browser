@@ -551,6 +551,27 @@ export class WebRtcDataPeer extends AWebRtcPeer {
         }
         return sentSuccessfully;
     }
+    public GetBufferedAmount(reliable: boolean): number {
+
+        let result = -1;
+        try {
+            if (reliable) {
+                if (this.mReliableDataChannel.readyState === "open")
+                {
+                    result = this.mReliableDataChannel.bufferedAmount;
+                }
+            }
+            else {
+                if (this.mUnreliableDataChannel.readyState === "open")
+                {
+                    result = this.mUnreliableDataChannel.bufferedAmount;
+                }
+            }
+        } catch (e) {
+            SLog.LogError("Exception while trying to access GetBufferedAmount: " + e);
+        }
+        return result;
+    }
 
     public DequeueEvent(/*out*/ ev: Output<NetworkEvent>): boolean {
         //lock(mEvents)

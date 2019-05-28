@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import { WebsocketTest } from "WebsocketNetworkTest";
 import { IBasicNetworkTest } from "helper/IBasicNetworkTest";
 import { NetworkEvent, IBasicNetwork, NetEventType, WebsocketNetwork,
-    ConnectionId, SignalingConfig, LocalNetwork, WebRtcNetwork } 
+    ConnectionId, SignalingConfig, LocalNetwork, WebRtcNetwork, IWebRtcNetwork } 
     from "../awrtc/index";
 
 export class WebRtcNetworkTest extends IBasicNetworkTest {
@@ -56,6 +56,46 @@ export class WebRtcNetworkTest extends IBasicNetworkTest {
             this.mUrl = WebsocketTest.sUrl;
             this.mUseWebsockets = WebRtcNetworkTest.mAlwaysUseWebsockets;
         })
+
+        it("GetBufferedAmount", (done) => {
+
+            var srv: IWebRtcNetwork;
+            var address: string;
+            var srvToCltId: ConnectionId;
+            var clt: IWebRtcNetwork;
+            var cltToSrvId: ConnectionId;
+            var evt: NetworkEvent;
+
+
+
+            this.thenAsync((finished) => {
+                this._CreateServerClient((rsrv, raddress, rsrvToCltId, rclt, rcltToSrvId) => {
+                    srv = rsrv as IWebRtcNetwork;
+                    address = raddress;
+                    srvToCltId = rsrvToCltId;
+                    clt = rclt as IWebRtcNetwork;
+                    cltToSrvId = rcltToSrvId;
+                    finished();
+                });
+            });
+            this.then(() => {
+                //TODO: more detailed testing by actually triggering the buffer to fill?
+                //might be tricky as this is very system dependent
+                let buf:number;
+                buf = srv.GetBufferedAmount(srvToCltId, false);
+                expect(buf).toBe(0);
+                buf = srv.GetBufferedAmount(srvToCltId, true);
+                expect(buf).toBe(0);
+                buf = clt.GetBufferedAmount(cltToSrvId, false);
+                expect(buf).toBe(0);
+                buf = clt.GetBufferedAmount(cltToSrvId, true);
+                expect(buf).toBe(0);
+                done();
+            });
+            
+            this.start();
+        });
+        
         it("SharedAddress", (done) => {
 
             //turn off websockets and use shared websockets for this test as local network doesn't support shared mode

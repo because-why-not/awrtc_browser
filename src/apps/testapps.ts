@@ -37,7 +37,7 @@ import { DeviceApi, DeviceInfo } from "../awrtc/index";
 
 //testapp to run a full connection test using the CAPI
 //which is used by the unity WebGL plugin
-export function CAPIWebRtcNetwork_testapp() {
+export function CAPI_WebRtcNetwork_testapp() {
     console.log("test1");
 
     var testMessage = "test1234";
@@ -46,26 +46,26 @@ export function CAPIWebRtcNetwork_testapp() {
     //var configuration = "{ \"signaling\" :  { \"class\": \"WebsocketNetwork\", \"param\" : \"ws://localhost:12776\"}, \"iceServers\":[\"stun:stun.l.google.com:19302\"]}";
     var configuration = "{ \"signaling\" :  { \"class\": \"LocalNetwork\", \"param\" : null}, \"iceServers\":[{\"urls\": \"stun:stun.l.google.com:19302\"}]}";
 
-    var srv = awrtc.CAPIWebRtcNetworkCreate(configuration);
-    awrtc.CAPIWebRtcNetworkStartServer(srv, "Room1");
+    var srv = awrtc.CAPI_WebRtcNetwork_Create(configuration);
+    awrtc.CAPI_WebRtcNetwork_StartServer(srv, "Room1");
 
-    var clt = awrtc.CAPIWebRtcNetworkCreate(configuration);
+    var clt = awrtc.CAPI_WebRtcNetwork_Create(configuration);
 
 
     setInterval(() => {
 
-        awrtc.CAPIWebRtcNetworkUpdate(srv);
+        awrtc.CAPI_WebRtcNetwork_Update(srv);
 
 
 
         var evt = null;
-        while (evt = awrtc.CAPIWebRtcNetworkDequeue(srv)) {
+        while (evt = awrtc.CAPI_WebRtcNetwork_Dequeue(srv)) {
 
             console.log("server inc: " + evt.toString());
 
             if (evt.Type == awrtc.NetEventType.ServerInitialized) {
                 console.log("server started. Address " + evt.Info);
-                awrtc.CAPIWebRtcNetworkConnect(clt, evt.Info);
+                awrtc.CAPI_WebRtcNetwork_Connect(clt, evt.Info);
 
             } else if (evt.Type == awrtc.NetEventType.ServerInitFailed) {
                 console.error("server start failed");
@@ -74,21 +74,21 @@ export function CAPIWebRtcNetwork_testapp() {
             } else if (evt.Type == awrtc.NetEventType.Disconnected) {
                 console.log("server peer disconnected");
                 console.log("server shutdown");
-                awrtc.CAPIWebRtcNetworkShutdown(srv);
+                awrtc.CAPI_WebRtcNetwork_Shutdown(srv);
             } else if (evt.Type == awrtc.NetEventType.ReliableMessageReceived) {
                 //srv.SendData(evt.ConnectionId, evt.MessageData, true);
-                awrtc.CAPIWebRtcNetworkSendData(srv, evt.ConnectionId.id, evt.MessageData, true);
+                awrtc.CAPI_WebRtcNetwork_SendData(srv, evt.ConnectionId.id, evt.MessageData, true);
             } else if (evt.Type == awrtc.NetEventType.UnreliableMessageReceived) {
                 //srv.SendData(evt.ConnectionId, evt.MessageData, false);
-                awrtc.CAPIWebRtcNetworkSendData(srv, evt.ConnectionId.id, evt.MessageData, false);
+                awrtc.CAPI_WebRtcNetwork_SendData(srv, evt.ConnectionId.id, evt.MessageData, false);
             }
         }
         //srv.Flush();
-        awrtc.CAPIWebRtcNetworkFlush(srv);
+        awrtc.CAPI_WebRtcNetwork_Flush(srv);
 
         //clt.Update();
-        awrtc.CAPIWebRtcNetworkUpdate(clt);
-        while (evt = awrtc.CAPIWebRtcNetworkDequeue(clt)) {
+        awrtc.CAPI_WebRtcNetwork_Update(clt);
+        while (evt = awrtc.CAPI_WebRtcNetwork_Dequeue(clt)) {
 
             console.log("client inc: " + evt.toString());
 
@@ -97,7 +97,7 @@ export function CAPIWebRtcNetwork_testapp() {
 
                 let buff = awrtc.Encoding.UTF16.GetBytes(testMessage);
                 //clt.SendData(evt.ConnectionId, buff, true);
-                awrtc.CAPIWebRtcNetworkSendData(clt, evt.ConnectionId.id, buff, true);
+                awrtc.CAPI_WebRtcNetwork_SendData(clt, evt.ConnectionId.id, buff, true);
             } else if (evt.Type == awrtc.NetEventType.ReliableMessageReceived) {
 
                 //check last message
@@ -110,7 +110,7 @@ export function CAPIWebRtcNetwork_testapp() {
 
                 let buff = awrtc.Encoding.UTF16.GetBytes(testMessage);
                 //clt.SendData(evt.ConnectionId, buff, false);
-                awrtc.CAPIWebRtcNetworkSendData(clt, evt.ConnectionId.id, buff, false);
+                awrtc.CAPI_WebRtcNetwork_SendData(clt, evt.ConnectionId.id, buff, false);
             } else if (evt.Type == awrtc.NetEventType.UnreliableMessageReceived) {
                 let str = awrtc.Encoding.UTF16.GetString(evt.MessageData);
                 if (str != testMessage) {
@@ -119,49 +119,49 @@ export function CAPIWebRtcNetwork_testapp() {
 
                 console.log("client disconnecting");
                 //clt.Disconnect(evt.ConnectionId);
-                awrtc.CAPIWebRtcNetworkDisconnect(clt, evt.ConnectionId.id);
+                awrtc.CAPI_WebRtcNetwork_Disconnect(clt, evt.ConnectionId.id);
                 console.log("client shutting down");
                 //clt.Shutdown();
-                awrtc.CAPIWebRtcNetworkShutdown(clt);
+                awrtc.CAPI_WebRtcNetwork_Shutdown(clt);
             }
         }
         //clt.Flush();
-        awrtc.CAPIWebRtcNetworkFlush(clt);
+        awrtc.CAPI_WebRtcNetwork_Flush(clt);
     }, 100);
 }
 //for testing the media API used by the unity plugin
-export function CAPIMediaNetwork_testapp()
+export function CAPI_MediaNetwork_testapp()
 {
     awrtc.BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
     
     var signalingUrl : string = DefaultValues.Signaling;
-    let lIndex = awrtc.CAPIMediaNetwork_Create("{\"IceUrls\":[\"stun:stun.l.google.com:19302\"], \"SignalingUrl\":\"ws://because-why-not.com:12776\"}");
+    let lIndex = awrtc.CAPI_MediaNetwork_Create("{\"IceUrls\":[\"stun:stun.l.google.com:19302\"], \"SignalingUrl\":\"ws://because-why-not.com:12776\"}");
 
     let configDone = false;
-    awrtc.CAPIMediaNetwork_Configure(lIndex, true, true, 160, 120, 640, 480, 640, 480, -1, -1, -1);
-    console.log(awrtc.CAPIMediaNetwork_GetConfigurationState(lIndex));
+    awrtc.CAPI_MediaNetwork_Configure(lIndex, true, true, 160, 120, 640, 480, 640, 480, -1, -1, -1);
+    console.log(awrtc.CAPI_MediaNetwork_GetConfigurationState(lIndex));
 
     let startTime = new Date().getTime();
 
     let mainLoop = function () {
 
-        awrtc.CAPIWebRtcNetworkUpdate(lIndex);
-        if (awrtc.CAPIMediaNetwork_GetConfigurationState(lIndex) == (awrtc.MediaConfigurationState.Successful as number) && configDone == false) {
+        awrtc.CAPI_WebRtcNetwork_Update(lIndex);
+        if (awrtc.CAPI_MediaNetwork_GetConfigurationState(lIndex) == (awrtc.MediaConfigurationState.Successful as number) && configDone == false) {
             configDone = true;
             console.log("configuration done");
         }
 
-        if (awrtc.CAPIMediaNetwork_GetConfigurationState(lIndex) == (awrtc.MediaConfigurationState.Failed as number)) {
+        if (awrtc.CAPI_MediaNetwork_GetConfigurationState(lIndex) == (awrtc.MediaConfigurationState.Failed as number)) {
             alert("configuration failed");
         }
         if (configDone == false)
-            console.log(awrtc.CAPIMediaNetwork_GetConfigurationState(lIndex));
+            console.log(awrtc.CAPI_MediaNetwork_GetConfigurationState(lIndex));
 
         if ((new Date().getTime() - startTime) < 15000) {
             window.requestAnimationFrame(mainLoop);
         } else {
             console.log("shutting down");
-            awrtc.CAPIWebRtcNetworkRelease(lIndex);
+            awrtc.CAPI_WebRtcNetwork_Release(lIndex);
         }
     }
     window.requestAnimationFrame(mainLoop);
@@ -412,7 +412,7 @@ class FpsCounter
 }
 
 //Sends video data between two peers within the same browser window
-//and accesses the resultung frame data directly
+//and accesses the resulting frame data directly
 export function BrowserMediaNetwork_frameaccess() {
 
 

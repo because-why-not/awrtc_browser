@@ -127,7 +127,9 @@ export class MediaPeer extends WebRtcDataPeer
         }
         else{
             for(let v of stream.getTracks())
+            {
                 this.mPeer.addTrack(v, stream);
+            }
         }
 
     }

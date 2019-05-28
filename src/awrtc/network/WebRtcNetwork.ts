@@ -151,8 +151,18 @@ export class WebRtcNetwork implements IBasicNetwork {
             SLog.LogWarning("unknown connection id");
             return false;
         }
-
     }
+    public GetBufferedAmount(id: ConnectionId, reliable: boolean): number {
+        let peer = this.mIdToConnection[id.id];
+        if (peer) {
+            return peer.GetBufferedAmount(reliable);
+
+        } else {
+            SLog.LogWarning("unknown connection id");
+            return -1;
+        }
+    }
+    
 
     public Disconnect(id: ConnectionId): void {
         let peer = this.mIdToConnection[id.id];

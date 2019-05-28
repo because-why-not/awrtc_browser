@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import {DeviceApi, CAPI_DeviceApi_Update, 
     CAPI_DeviceApi_RequestUpdate, CAPI_DeviceApi_Devices_Length, 
     CAPI_DeviceApi_Devices_Get} from "../awrtc/index"
+
 export function DeviceApiTest_export()
 {
 
@@ -97,7 +98,7 @@ describe("DeviceApiTest", () => {
                 //should have original label now
                 expect(devices2[key1].label).not.toBe("videodevice 1");
                 //and not be guessed anymore
-                expect(devices2[key1].isLabelGuessed).toBe(false);
+                expect(devices2[key1].isLabelGuessed).toBe(false, "Chrome fails this now. Likely due to file://. Check for better test setup");
                 update2complete = true;
 
                 DeviceApi.Reset();

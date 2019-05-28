@@ -40,6 +40,7 @@ export class WebsocketTest extends IBasicNetworkTest {
     //public static sUrl = 'ws://localhost:12776/test';
     //public static sUrlShared = 'ws://localhost:12776/testshared';
     public static sUrl = 'ws://signaling.because-why-not.com';
+    //public static sUrl = 'ws://192.168.1.3:12776';
     public static sUrlShared = 'ws://signaling.because-why-not.com/testshared';
     //any url to simulate offline server
     public static sBadUrl = 'ws://localhost:13776';
@@ -53,6 +54,42 @@ export class WebsocketTest extends IBasicNetworkTest {
         beforeEach(() => {
             this.mUrl = WebsocketTest.sUrl;
         });
+
+        //can only be done manually so far
+        xit("Timeout", (done) => {
+            //this needs to be a local test server
+            //that can be disconnected to test the timeout
+            this.mUrl = "ws://192.168.1.3:12776";
+            var evt: NetworkEvent;
+            var srv: WebsocketNetwork;
+            var address;
+
+            this.thenAsync((finished) => {
+                this._CreateServerNetwork((rsrv, raddress) => {
+                    srv = rsrv;
+                    address = raddress;
+                    finished();
+                });
+            });
+            this.thenAsync((finished) => {
+                console.log("Server ready at " + address);
+                expect(srv).not.toBeNull();
+                expect(address).not.toBeNull();
+                
+                console.debug("Waiting for timeout");
+                this.waitForEvent(srv, finished, 120000);
+                
+            });
+            this.then(() => {
+                console.log("Timeout over");
+                evt = srv.Dequeue();
+                expect(evt).not.toBeNull();
+                expect(evt.Type).toBe(NetEventType.ServerClosed);
+                expect(srv.getStatus()).toBe(WebsocketConnectionStatus.NotConnected);
+                done();
+            });
+            this.start();
+        }, 130000);
 
         it("SharedAddress", (done) => {
             this.mUrl = WebsocketTest.sUrlShared;

@@ -138,7 +138,7 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
                 
 
             //user requested specific device? get it now to properly add it to the
-            //constraints alter
+            //constraints later
             let deviceId:string = null;
             if(config.Video && config.VideoDeviceName && config.VideoDeviceName !== "")
             {
@@ -184,30 +184,39 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
             constraints.video = video;
 
             SLog.L("calling GetUserMedia. Media constraints: " + JSON.stringify(constraints));
-            let promise = navigator.mediaDevices.getUserMedia(constraints);
-            promise.then((stream) => { //user gave permission
-
-                    //totally unrelated -> user gave access to devices. use this
-                    //to get the proper names for our DeviceApi
-                    DeviceApi.Update();
-                
-                    //call worked -> setup a frame buffer that deals with the rest
-                    this.mLocalStream = new BrowserMediaStream(stream as MediaStream);
-                    this.mLocalStream.InternalStreamAdded = (stream)=>{
-                        this.EnqueueMediaEvent(MediaEventType.StreamAdded, ConnectionId.INVALID, this.mLocalStream.VideoElement);
-                    };
-
-                    //unlike native version this one will happily play the local sound causing an echo
-                    //set to mute
-                    this.mLocalStream.SetMute(true);
-                    this.OnConfigurationSuccess();
-
-                });
-            promise.catch((err)=> {
-                    //failed due to an error or user didn't give permissions
-                    SLog.LE(err.name + ": " + err.message);
-                    this.OnConfigurationFailed(err.message);
-                });
+            if(navigator && navigator.mediaDevices)
+            {
+                let promise = navigator.mediaDevices.getUserMedia(constraints);
+                promise.then((stream) => { //user gave permission
+    
+                        //totally unrelated -> user gave access to devices. use this
+                        //to get the proper names for our DeviceApi
+                        DeviceApi.Update();
+                    
+                        //call worked -> setup a frame buffer that deals with the rest
+                        this.mLocalStream = new BrowserMediaStream(stream as MediaStream);
+                        this.mLocalStream.InternalStreamAdded = (stream)=>{
+                            this.EnqueueMediaEvent(MediaEventType.StreamAdded, ConnectionId.INVALID, this.mLocalStream.VideoElement);
+                        };
+    
+                        //unlike native version this one will happily play the local sound causing an echo
+                        //set to mute
+                        this.mLocalStream.SetMute(true);
+                        this.OnConfigurationSuccess();
+    
+                    });
+                promise.catch((err)=> {
+                        //failed due to an error or user didn't give permissions
+                        SLog.LE(err.name + ": " + err.message);
+                        this.OnConfigurationFailed(err.message);
+                    });
+            }else{
+                //no access to media device -> fail
+                let error = "Configuration failed. navigator.mediaDevices is unedfined. The browser might not allow media access." +
+                "Is the page loaded via http or file URL? Some browsers only support https!";
+                SLog.LE(error);
+                this.OnConfigurationFailed(error);
+            }
         } else {
             this.OnConfigurationSuccess();
         }

@@ -18,6 +18,8 @@
     "WebRtcNetworkTest.ts",
     "CallTest.ts",
     "LocalNetworkTest.ts",
-    "MediaNetworkTest.ts"
+    "MediaNetworkTest.ts",
+    "DeviceApiTest.ts",
+    "BrowserApiTest.ts"
   ]
 }

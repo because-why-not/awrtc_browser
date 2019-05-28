@@ -45,9 +45,12 @@ export enum WebsocketServerStatus {
     ShuttingDown
 }
 
+
 //TODO: handle errors if the socket connection failed
 //+ send back failed events for connected / serverstart events that are buffered
 export class WebsocketNetwork implements IBasicNetwork  {
+
+    public static readonly LOGTAG = "WebsocketNetwork";
 
     //websocket. 
     private mSocket: WebSocket;
@@ -73,13 +76,40 @@ export class WebsocketNetwork implements IBasicNetwork  {
     //next free connection id
     private mNextOutgoingConnectionId = new ConnectionId(1);
 
+    /// <summary>
+    /// Version of the protocol implemented here
+    /// </summary>
+    public static readonly PROTOCOL_VERSION = 2;
+
+    /// <summary>
+    /// Minimal protocol version that is still supported.
+    /// V 1 servers won't understand heartbeat and version
+    /// messages but would just log an unknown message and
+    /// continue normally.
+    /// </summary>
+    public static readonly PROTOCOL_VERSION_MIN = 1;
+
+    /// <summary>
+    /// Assume 1 until message received
+    /// </summary>
+    private mRemoteProtocolVersion = 1;
+
     private mUrl: string = null;
+    private mConfig: WebsocketNetwork.Configuration;
+    private mLastHeartbeat: number;
+    private mHeartbeatReceived = true;
+
     private mIsDisposed = false;
 
 
-    public constructor(url: string) {
+    public constructor(url: string, configuration?:WebsocketNetwork.Configuration) {
         this.mUrl = url;
         this.mStatus = WebsocketConnectionStatus.NotConnected;
+
+        this.mConfig = configuration;
+        if(!this.mConfig)
+            this.mConfig = new WebsocketNetwork.Configuration();
+        this.mConfig.Lock();
     }
     private WebsocketConnect(): void {
 
@@ -90,7 +120,6 @@ export class WebsocketNetwork implements IBasicNetwork  {
         this.mSocket.onerror = (error) => { this.OnWebsocketOnError(error); };
         this.mSocket.onmessage = (e) => { this.OnWebsocketOnMessage(e); };
         this.mSocket.onclose = (e) => { this.OnWebsocketOnClose(e); };
-        //js websockets connect automatically after creation?
     }
     private WebsocketCleanup() : void {
         this.mSocket.onopen = null;
@@ -114,7 +143,33 @@ export class WebsocketNetwork implements IBasicNetwork  {
             this.WebsocketConnect();
         }
     }
+    private UpdateHeartbeat():void{
 
+        if(this.mStatus == WebsocketConnectionStatus.Connected && this.mConfig.Heartbeat > 0)
+        {
+            let diff = Date.now() - this.mLastHeartbeat;
+            if(diff > (this.mConfig.Heartbeat * 1000))
+            {
+                //We trigger heatbeat timeouts only for protocol V2
+                //protocol 1 can receive the heatbeats but 
+                //won't send a reply
+                //(still helpful to trigger TCP ACK timeout)
+                if(this.mRemoteProtocolVersion > 1
+                     && this.mHeartbeatReceived == false)
+                {
+                    this.TriggerHeartbeatTimeout();
+                    return;
+                }
+                this.mLastHeartbeat = Date.now();
+                this.mHeartbeatReceived = false;
+                this.SendHeartbeat();
+            }
+        }
+    }
+    private TriggerHeartbeatTimeout(){
+        SLog.L("Closing due to heartbeat timeout. Server didn't respond in time.", WebsocketNetwork.LOGTAG);
+        this.Cleanup();
+    }
     private CheckSleep() : void
     {
         if (this.mStatus == WebsocketConnectionStatus.Connected
@@ -131,11 +186,13 @@ export class WebsocketNetwork implements IBasicNetwork  {
 
     private OnWebsocketOnOpen() {
 
-        SLog.L('onWebsocketOnOpen');
+        SLog.L('onWebsocketOnOpen', WebsocketNetwork.LOGTAG);
         this.mStatus = WebsocketConnectionStatus.Connected;
+        this.mLastHeartbeat = Date.now();
+        this.SendVersion();
     }
     private OnWebsocketOnClose(event: CloseEvent) {
-        SLog.L('Closed: ' + JSON.stringify(event));
+        SLog.L('Closed: ' + JSON.stringify(event), WebsocketNetwork.LOGTAG);
 
         if(event.code != 1000)
         {
@@ -154,10 +211,9 @@ export class WebsocketNetwork implements IBasicNetwork  {
             || this.mStatus == WebsocketConnectionStatus.NotConnected)
             return;
         //browsers will have ArrayBuffer in event.data -> change to byte array
-        let evt = NetworkEvent.fromByteArray(new Uint8Array(event.data));
-        this.HandleIncomingEvent(evt);
+        let msg = new Uint8Array(event.data);
+        this.ParseMessage(msg);
     }
-
     private OnWebsocketOnError(error) {
         //the error event doesn't seem to have any useful information?
         //browser is expected to call OnClose after this
@@ -244,6 +300,31 @@ export class WebsocketNetwork implements IBasicNetwork  {
             this.mConnections.splice(index, 1);
         }
     }
+    
+    private ParseMessage(msg:Uint8Array):void{
+        if(msg.length == 0)
+        {
+            
+        }else if(msg[0] == NetEventType.MetaVersion)
+        {
+            if (msg.length > 1)
+            {
+                this.mRemoteProtocolVersion = msg[1];
+            }
+            else
+            {
+                SLog.LW("Received an invalid MetaVersion header without content.");
+            }
+
+        }else if(msg[0] == NetEventType.MetaHeartbeat)
+        {
+            this.mHeartbeatReceived = true;
+        }else
+        {
+            let evt = NetworkEvent.fromByteArray(msg);
+            this.HandleIncomingEvent(evt);
+        }
+    }
     private HandleIncomingEvent(evt: NetworkEvent) {
         
         if (evt.Type == NetEventType.NewConnection) {
@@ -283,12 +364,37 @@ export class WebsocketNetwork implements IBasicNetwork  {
 
         while (this.mOutgoingQueue.length > 0) {
             var evt = this.mOutgoingQueue.shift();
-            //var msg = NetworkEvent.toString(evt);
-            var msg = NetworkEvent.toByteArray(evt);
-            this.mSocket.send(msg);
+            this.SendNetworkEvent(evt);
         }
     }
 
+
+
+    private SendHeartbeat() : void
+    {
+        let msg = new Uint8Array(1);
+        msg[0] = NetEventType.MetaHeartbeat;
+        this.InternalSend(msg);
+    }
+
+    private SendVersion() :void
+    {
+        let msg = new Uint8Array(2);
+        msg[0] = NetEventType.MetaVersion;
+        msg[1] = WebsocketNetwork.PROTOCOL_VERSION;
+        this.InternalSend(msg);
+    }
+
+    private SendNetworkEvent(evt: NetworkEvent):void
+    {
+        var msg = NetworkEvent.toByteArray(evt);
+        this.InternalSend(msg);
+    }
+
+    private InternalSend(msg: Uint8Array): void
+    {
+        this.mSocket.send(msg);
+    }
 
     private NextConnectionId(): ConnectionId {
         var result = this.mNextOutgoingConnectionId;
@@ -320,9 +426,11 @@ export class WebsocketNetwork implements IBasicNetwork  {
         return null;
     }
     public Update(): void {
-
+    
+        this.UpdateHeartbeat();
         this.CheckSleep();
     }
+    
     public Flush(): void {
         //ideally we buffer everything and then flush when it is connected as
         //websockets aren't suppose to be used for realtime communication anyway
@@ -394,6 +502,34 @@ export class WebsocketNetwork implements IBasicNetwork  {
         return newConId;
     }
 }
+
+
+export namespace WebsocketNetwork{
+
+    export class Configuration{
+        mHeartbeat:number = 30;
+        
+        get Heartbeat():number
+        {
+            return this.mHeartbeat;
+        }
+        set Heartbeat(value:number){
+            if(this.mLocked)
+            {
+                throw new Error("Can't change configuration once used.");
+            }
+            this.mHeartbeat = value;
+        }
+
+        mLocked = false;
+
+        Lock():void
+        {
+            this.mLocked = true;
+        }
+    }
+}
+
 
 //Below tests only. Move out later
 

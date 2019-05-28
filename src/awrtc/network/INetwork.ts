@@ -49,7 +49,23 @@ export enum NetEventType {
     Disconnected = 8,//a connection was disconnected
     FatalError = 100, //not yet used
     Warning = 101,//not yet used
-    Log = 102 //not yet used
+    Log = 102, //not yet used
+
+    /// <summary>
+    /// This value and higher are reserved for other uses. 
+    /// Should never get to the user and should be filtered out.
+    /// </summary>
+    ReservedStart = 200,
+    /// <summary>
+    /// Reserved.
+    /// Used by protocols that forward NetworkEvents
+    /// </summary>
+    MetaVersion = 201,
+    /// <summary>
+    /// Reserved.
+    /// Used by protocols that forward NetworkEvents.
+    /// </summary>
+    MetaHeartbeat = 202
 }
 export enum NetEventDataType {
     Null = 0,
@@ -330,6 +346,7 @@ export interface IBasicNetwork extends INetwork {
     Connect(address: string): ConnectionId;
 }
 export interface IWebRtcNetwork extends IBasicNetwork {
+    GetBufferedAmount(id: ConnectionId, reliable:boolean): number;
 }
 //export {NetEventType, NetworkEvent, ConnectionId, INetwork, IBasicNetwork};
 

@@ -53,6 +53,17 @@ export class DeviceApi
         return DeviceApi.sLastUpdate > 0;
     }
 
+    private static sIsPending = false;
+    public static get IsPending(){
+        return DeviceApi.sIsPending;
+    }
+
+    private static sLastError:string = null;
+    private static get LastError()
+    {
+        return this.sLastError;
+    }
+
 
     private static sDeviceInfo: { [id: string] : DeviceInfo; } = {};
     private static sVideoDeviceCounter = 1;
@@ -87,6 +98,7 @@ export class DeviceApi
 
     private static InternalOnEnum = (devices:MediaDeviceInfo[])=>
     {
+        DeviceApi.sIsPending = false;
         DeviceApi.sLastUpdate = new Date().getTime();
 
         let newDeviceInfo: { [id: string] : DeviceInfo; } = {};
@@ -141,7 +153,10 @@ export class DeviceApi
 
         if(DeviceApi.sAccessStream)
         {
-            DeviceApi.sAccessStream.stop();
+            var tracks = DeviceApi.sAccessStream.getTracks();
+            for (var i = 0; i < tracks.length; i++) {
+                tracks[i].stop();
+            }
             DeviceApi.sAccessStream = null;
         }
         DeviceApi.TriggerChangedEvent();
@@ -158,11 +173,21 @@ export class DeviceApi
         DeviceApi.sDeviceInfo = {};
         DeviceApi.sVideoDeviceCounter = 1;
         DeviceApi.sAccessStream = null;
+        DeviceApi.sLastError = null;
+        DeviceApi.sIsPending = false;
     }
 
-    private static InternalOnError = (err:DOMError)=>
+    private static InternalOnErrorCatch = (err:DOMError)=>
     {
+        let txt :string = err.toString();
+        DeviceApi.InternalOnErrorString(txt);
+    }
+    private static InternalOnErrorString = (err:string)=>
+    {
+        DeviceApi.sIsPending = false;
+        DeviceApi.sLastError = err;
         SLog.LE(err);
+        DeviceApi.TriggerChangedEvent();
     }
 
     private static InternalOnStream = (stream:MediaStream)=>
@@ -173,24 +198,48 @@ export class DeviceApi
 
 
     /**Updates the device list based on the current
-     * access. Given devices numbers if the name isn't known.
+     * access. Gives the devices numbers if the name isn't known.
      */
     public static Update():void
     {
-        navigator.mediaDevices.enumerateDevices()
-        .then(DeviceApi.InternalOnEnum)
-        .catch(DeviceApi.InternalOnError);
+        DeviceApi.sLastError = null;
+        if(DeviceApi.IsApiAvailable())
+        {
+            DeviceApi.sIsPending = true;
+            navigator.mediaDevices.enumerateDevices()
+            .then(DeviceApi.InternalOnEnum)
+            .catch(DeviceApi.InternalOnErrorCatch);
+        }else{
+            DeviceApi.InternalOnErrorString("Can't access mediaDevices or enumerateDevices");
+        }
     }
-
+    /**Checks if the API is available in the browser.
+     * false - browser doesn't support this API
+     * true - browser supports the API (might still refuse to give
+     * us access later on)
+     */
+    public static IsApiAvailable():boolean
+    {
+        if(navigator && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)
+            return true;
+        return false;
+    }
     /**Asks the user for access first to get the full
      * device names.
      */
     public static RequestUpdate():void
     {
-        let constraints = {video:true};
-        navigator.mediaDevices.getUserMedia(constraints)
-        .then(DeviceApi.InternalOnStream)
-        .catch(DeviceApi.InternalOnError);
+        DeviceApi.sLastError = null;
+        if(DeviceApi.IsApiAvailable())
+        {
+            DeviceApi.sIsPending = true;
+            let constraints = {video:true};
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(DeviceApi.InternalOnStream)
+                .catch(DeviceApi.InternalOnErrorCatch);
+        }else{
+            DeviceApi.InternalOnErrorString("Can't access mediaDevices or enumerateDevices");
+        }
     }
 
 

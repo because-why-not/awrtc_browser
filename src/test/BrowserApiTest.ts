@@ -74,7 +74,9 @@ describe("BrowserApiTest_MediaStreamApi", () => {
                     console.log(device.kind + ": " + device.label +
                                 " id = " + device.deviceId);
                 });
-                gStream.stop();
+                gStream.getTracks().forEach(t => {
+                    t.stop();
+                });
                 done();
             })
             .catch(function(err) {
@@ -109,7 +111,9 @@ describe("BrowserApiTest_MediaStreamApi", () => {
                     console.log(device.kind + ": " + device.label +
                                 " id = " + device.deviceId);
                 });
-                gStream.stop();
+                gStream.getTracks().forEach(t => {
+                    t.stop();
+                });
                 done();
             })
             .catch(function(err) {

@@ -28,7 +28,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { BasicNetworkTestBase, Task } from "./BasicNetworkTestBase";
-import { IBasicNetwork, NetworkEvent, NetEventType, ConnectionId, Encoding } from "../../awrtc/network/index";
+import { IBasicNetwork, NetworkEvent, NetEventType, ConnectionId, Encoding, SLog, SLogLevel } from "../../awrtc/network/index";
 
 export abstract class IBasicNetworkTest extends BasicNetworkTestBase {
 
@@ -36,10 +36,12 @@ export abstract class IBasicNetworkTest extends BasicNetworkTestBase {
         super.setup();
         let originalTimeout = 5000;
         beforeEach(() => {
+            SLog.RequestLogLevel(SLogLevel.Info);
             originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
             jasmine.DEFAULT_TIMEOUT_INTERVAL = this.mDefaultWaitTimeout + 5000;
         });
         afterEach(() => {
+            console.debug("Test shutting down ...");
             this.ShutdownAll();
             originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
             jasmine.DEFAULT_TIMEOUT_INTERVAL = this.mDefaultWaitTimeout + 5000;

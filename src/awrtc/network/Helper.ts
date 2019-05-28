@@ -196,27 +196,39 @@ export class SLog {
     {
         SLog.sLogLevel = level;
     }
+    public static RequestLogLevel(level: SLogLevel)
+    {
+        if(level > SLog.sLogLevel)
+            SLog.sLogLevel = level;
+    }
 
-    public static L(msg: any): void {
-        SLog.Log(msg);
+
+    public static L(msg: any, tag?:string): void {
+        SLog.Log(msg, tag);
     }
-    public static LW(msg: any): void {
-        SLog.LogWarning(msg);
+    public static LW(msg: any, tag?:string): void {
+        SLog.LogWarning(msg, tag);
     }
-    public static LE(msg: any): void {
-        SLog.LogError(msg);
+    public static LE(msg: any, tag?:string): void {
+        SLog.LogError(msg, tag);
     }
-    public static Log(msg: any): void {
+    public static Log(msg: any, tag?:string): void {
+        if(!tag)
+            tag = "";
         if(SLog.sLogLevel >= SLogLevel.Info)
-            console.log(msg);
+            console.log(msg, tag);
     }
-    public static LogWarning(msg: any): void {
+    public static LogWarning(msg: any, tag?:string): void {
+        if(!tag)
+            tag = "";
         if(SLog.sLogLevel >= SLogLevel.Warnings)
-            console.warn(msg);
+            console.warn(msg, tag);
     }
 
-    public static LogError(msg: any) {
+    public static LogError(msg: any, tag?:string) {
+        if(!tag)
+            tag = "";
         if(SLog.sLogLevel >= SLogLevel.Errors)
-            console.error(msg);
+            console.error(msg, tag);
     }
 }

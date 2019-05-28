@@ -32,23 +32,107 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 import {SLog, WebRtcNetwork, SignalingConfig, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork} from "../network/index"
 import { MediaConfigurationState, NetworkConfig, MediaConfig } from "../media/index";
-import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi } from "../media_browser/index";
+import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall } from "../media_browser/index";
 
 
-var gCAPIWebRtcNetworkInstances: { [id: number]: WebRtcNetwork }= {};
-var gCAPIWebRtcNetworkInstancesNextIndex = 1;
+var CAPI_InitMode = {
+    //Original mode. Devices will be unknown after startup
+    Default: 0,
+    //Waits for the desvice info to come in
+    //names might be missing though (browser security thing)
+    WaitForDevices: 1,
+    //Asks the user for camera / audio access to be able to
+    //get accurate device information
+    RequestAccess: 2
+  };
+
+var CAPI_InitState = {
+    Uninitialized: 0,
+    Initializing: 1,
+    Initialized: 2,
+    Failed: 3
+  };
+var gCAPI_InitState = CAPI_InitState.Uninitialized;
+
+export function CAPI_InitAsync(initmode) 
+{
+    console.debug("CAPI_InitAsync mode: " + initmode);
+    gCAPI_InitState = CAPI_InitState.Initializing;
+    let hasDevApi = DeviceApi.IsApiAvailable();
+    if( hasDevApi && initmode == CAPI_InitMode.WaitForDevices)
+    {
+        DeviceApi.Update();
+    }else if(hasDevApi && initmode == CAPI_InitMode.RequestAccess)
+    {
+        DeviceApi.RequestUpdate();
+    }else{
+        //either no device access available or not requested. Switch
+        //to init state immediately without device info
+        gCAPI_InitState = CAPI_InitState.Initialized;
+        if(hasDevApi == false)
+        {
+            console.debug("Initialized without accessible DeviceAPI");
+        }
+    }
+}
+export function CAPI_PollInitState() 
+{
+    //keep checking if the DeviceApi left pending state
+    //Once completed init is finished.
+    //Later we might do more here
+    if(DeviceApi.IsPending == false && gCAPI_InitState == CAPI_InitState.Initializing)
+    {
+        gCAPI_InitState = CAPI_InitState.Initialized;
+        console.debug("Init completed.");
+    }
+    return gCAPI_InitState;
+}
+
+/**
+ * 
+ * @param loglevel 
+ * None = 0,
+ * Errors = 1,
+ * Warnings = 2,
+ * Verbose = 3
+ */
+export function CAPI_SLog_SetLogLevel(loglevel:number)
+{
+    if(loglevel < 0 || loglevel > 3)
+    {
+        SLog.LogError("Invalid log level " + loglevel);
+        return;
+    }
+    SLog.SetLogLevel(loglevel);
+}
 
 
-export function CAPIWebRtcNetworkIsAvailable() {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+
+var gCAPI_WebRtcNetwork_Instances: { [id: number]: WebRtcNetwork }= {};
+var gCAPI_WebRtcNetwork_InstancesNextIndex = 1;
+
+
+export function CAPI_WebRtcNetwork_IsAvailable() {
+    //used by C# component to check if this plugin is loaded.
+    //can only go wrong due to programming error / packaging
+    if(WebRtcNetwork && WebsocketNetwork)
         return true;
-
-    SLog.LE("Browser doesn't seem to support a modern WebRTC API");
     return false;
 }
-export function CAPIWebRtcNetworkCreate(lConfiguration: string) {
-    var lIndex = gCAPIWebRtcNetworkInstancesNextIndex;
-    gCAPIWebRtcNetworkInstancesNextIndex++;
+
+
+export function CAPI_WebRtcNetwork_IsBrowserSupported() 
+{
+    if (RTCPeerConnection && RTCDataChannel)
+        return true;
+
+    return false;
+}
+
+
+export function CAPI_WebRtcNetwork_Create(lConfiguration: string) {
+    var lIndex = gCAPI_WebRtcNetwork_InstancesNextIndex;
+    gCAPI_WebRtcNetwork_InstancesNextIndex++;
 
     var signaling_class = "LocalNetwork";
     var signaling_param: any = null;
@@ -90,83 +174,87 @@ export function CAPIWebRtcNetworkCreate(lConfiguration: string) {
             
             let rtcConfiguration: RTCConfiguration = { iceServers: iceServers };
 
-            gCAPIWebRtcNetworkInstances[lIndex] = new WebRtcNetwork(signalingConfig, rtcConfiguration);
+            gCAPI_WebRtcNetwork_Instances[lIndex] = new WebRtcNetwork(signalingConfig, rtcConfiguration);
         } else {
             SLog.LogWarning("Parsing configuration failed. Configuration: " + lConfiguration);
             return -1;
         }
     }
-    //gCAPIWebRtcNetworkInstances[lIndex].OnLog = function (lMsg) {
+    //gCAPI_WebRtcNetwork_Instances[lIndex].OnLog = function (lMsg) {
     //    console.debug(lMsg);
     //};
     return lIndex;
 }
 
-export function CAPIWebRtcNetworkRelease(lIndex: number) {
-    if (lIndex in gCAPIWebRtcNetworkInstances) {
-        gCAPIWebRtcNetworkInstances[lIndex].Dispose();
-        delete gCAPIWebRtcNetworkInstances[lIndex];
+export function CAPI_WebRtcNetwork_Release(lIndex: number) {
+    if (lIndex in gCAPI_WebRtcNetwork_Instances) {
+        gCAPI_WebRtcNetwork_Instances[lIndex].Dispose();
+        delete gCAPI_WebRtcNetwork_Instances[lIndex];
     }
 }
 
-export function CAPIWebRtcNetworkConnect(lIndex: number, lRoom: string) {
-    return gCAPIWebRtcNetworkInstances[lIndex].Connect(lRoom);
+export function CAPI_WebRtcNetwork_Connect(lIndex: number, lRoom: string) {
+    return gCAPI_WebRtcNetwork_Instances[lIndex].Connect(lRoom);
 }
 
-export function CAPIWebRtcNetworkStartServer(lIndex: number, lRoom: string) {
-    gCAPIWebRtcNetworkInstances[lIndex].StartServer(lRoom);
+export function CAPI_WebRtcNetwork_StartServer(lIndex: number, lRoom: string) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].StartServer(lRoom);
 }
-export function CAPIWebRtcNetworkStopServer(lIndex: number) {
-    gCAPIWebRtcNetworkInstances[lIndex].StopServer();
+export function CAPI_WebRtcNetwork_StopServer(lIndex: number) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].StopServer();
 }
-export function CAPIWebRtcNetworkDisconnect(lIndex: number, lConnectionId: number) {
-    gCAPIWebRtcNetworkInstances[lIndex].Disconnect(new ConnectionId(lConnectionId));
-}
-
-export function CAPIWebRtcNetworkShutdown(lIndex: number) {
-    gCAPIWebRtcNetworkInstances[lIndex].Shutdown();
+export function CAPI_WebRtcNetwork_Disconnect(lIndex: number, lConnectionId: number) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].Disconnect(new ConnectionId(lConnectionId));
 }
 
-export function CAPIWebRtcNetworkUpdate(lIndex: number) {
-    gCAPIWebRtcNetworkInstances[lIndex].Update();
+export function CAPI_WebRtcNetwork_Shutdown(lIndex: number) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].Shutdown();
 }
 
-export function CAPIWebRtcNetworkFlush(lIndex: number) {
-    gCAPIWebRtcNetworkInstances[lIndex].Flush();
+export function CAPI_WebRtcNetwork_Update(lIndex: number) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].Update();
 }
 
-export function CAPIWebRtcNetworkSendData(lIndex: number, lConnectionId: number, lUint8ArrayData: Uint8Array, lReliable: boolean) {
-    gCAPIWebRtcNetworkInstances[lIndex].SendData(new ConnectionId(lConnectionId), lUint8ArrayData, lReliable);
+export function CAPI_WebRtcNetwork_Flush(lIndex: number) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].Flush();
+}
+
+export function CAPI_WebRtcNetwork_SendData(lIndex: number, lConnectionId: number, lUint8ArrayData: Uint8Array, lReliable: boolean) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].SendData(new ConnectionId(lConnectionId), lUint8ArrayData, lReliable);
 }
 
 //helper for emscripten
-export function CAPIWebRtcNetworkSendDataEm(lIndex: number, lConnectionId: number, lUint8ArrayData: Uint8Array, lUint8ArrayDataOffset: number, lUint8ArrayDataLength: number, lReliable: boolean) {
+export function CAPI_WebRtcNetwork_SendDataEm(lIndex: number, lConnectionId: number, lUint8ArrayData: Uint8Array, lUint8ArrayDataOffset: number, lUint8ArrayDataLength: number, lReliable: boolean) {
     //console.debug("SendDataEm: " + lReliable + " length " + lUint8ArrayDataLength + " to " + lConnectionId);
     var arrayBuffer = new Uint8Array(lUint8ArrayData.buffer, lUint8ArrayDataOffset, lUint8ArrayDataLength);
-    return gCAPIWebRtcNetworkInstances[lIndex].SendData(new ConnectionId(lConnectionId), arrayBuffer, lReliable);
+    return gCAPI_WebRtcNetwork_Instances[lIndex].SendData(new ConnectionId(lConnectionId), arrayBuffer, lReliable);
+}
+
+export function CAPI_WebRtcNetwork_GetBufferedAmount(lIndex: number, lConnectionId: number, lReliable: boolean) {
+    return gCAPI_WebRtcNetwork_Instances[lIndex].GetBufferedAmount(new ConnectionId(lConnectionId), lReliable);
 }
 
 
-export function CAPIWebRtcNetworkDequeue(lIndex: number): NetworkEvent {
-    return gCAPIWebRtcNetworkInstances[lIndex].Dequeue();
+export function CAPI_WebRtcNetwork_Dequeue(lIndex: number): NetworkEvent {
+    return gCAPI_WebRtcNetwork_Instances[lIndex].Dequeue();
 }
-export function CAPIWebRtcNetworkPeek(lIndex: number): NetworkEvent {
-    return gCAPIWebRtcNetworkInstances[lIndex].Peek();
+export function CAPI_WebRtcNetwork_Peek(lIndex: number): NetworkEvent {
+    return gCAPI_WebRtcNetwork_Instances[lIndex].Peek();
 }
 
 /**Allows to peek into the next event to figure out its length and allocate
  * the memory needed to store it before calling
- *      CAPIWebRtcNetworkDequeueEm
+ *      CAPI_WebRtcNetwork_DequeueEm
  * 
  * @param {type} lIndex
  * @returns {Number}
  */
-export function CAPIWebRtcNetworkPeekEventDataLength(lIndex) {
-    var lNetEvent = gCAPIWebRtcNetworkInstances[lIndex].Peek();
-    return CAPIWebRtcNetworkCheckEventLength(lNetEvent);
+export function CAPI_WebRtcNetwork_PeekEventDataLength(lIndex) {
+    var lNetEvent = gCAPI_WebRtcNetwork_Instances[lIndex].Peek();
+    return CAPI_WebRtcNetwork_CheckEventLength(lNetEvent);
 }
 //helper
-export function CAPIWebRtcNetworkCheckEventLength(lNetEvent: NetworkEvent) {
+export function CAPI_WebRtcNetwork_CheckEventLength(lNetEvent: NetworkEvent) {
     if (lNetEvent == null) {
         //invalid event
         return -1;
@@ -185,7 +273,7 @@ export function CAPIWebRtcNetworkCheckEventLength(lNetEvent: NetworkEvent) {
         return lNetEvent.RawData.length;
     }
 }
-export function CAPIWebRtcNetworkEventDataToUint8Array(data: any, dataUint8Array: Uint8Array, dataOffset: number, dataLength: number) {
+export function CAPI_WebRtcNetwork_EventDataToUint8Array(data: any, dataUint8Array: Uint8Array, dataOffset: number, dataLength: number) {
     //data can be null, string or Uint8Array
     //return value will be the length of data we used
     if (data == null) {
@@ -211,8 +299,8 @@ export function CAPIWebRtcNetworkEventDataToUint8Array(data: any, dataUint8Array
 //Version for emscripten or anything that doesn't have a garbage collector.
 // The memory for everything needs to be allocated before the call.
 
-export function CAPIWebRtcNetworkDequeueEm(lIndex: number, lTypeIntArray: Int32Array, lTypeIntIndex: number, lConidIntArray: Int32Array, lConidIndex: number, lDataUint8Array: Uint8Array, lDataOffset: number, lDataLength: number, lDataLenIntArray: Int32Array, lDataLenIntIndex: number) {
-    var nEvt = CAPIWebRtcNetworkDequeue(lIndex);
+export function CAPI_WebRtcNetwork_DequeueEm(lIndex: number, lTypeIntArray: Int32Array, lTypeIntIndex: number, lConidIntArray: Int32Array, lConidIndex: number, lDataUint8Array: Uint8Array, lDataOffset: number, lDataLength: number, lDataLenIntArray: Int32Array, lDataLenIntIndex: number) {
+    var nEvt = CAPI_WebRtcNetwork_Dequeue(lIndex);
     if (nEvt == null)
         return false;
 
@@ -220,13 +308,13 @@ export function CAPIWebRtcNetworkDequeueEm(lIndex: number, lTypeIntArray: Int32A
     lConidIntArray[lConidIndex] = nEvt.ConnectionId.id;
 
     //console.debug("event" + nEvt.netEventType);
-    var length = CAPIWebRtcNetworkEventDataToUint8Array(nEvt.RawData, lDataUint8Array, lDataOffset, lDataLength);
+    var length = CAPI_WebRtcNetwork_EventDataToUint8Array(nEvt.RawData, lDataUint8Array, lDataOffset, lDataLength);
     lDataLenIntArray[lDataLenIntIndex] = length; //return the length if so the user knows how much of the given array is used
 
     return true;
 }
-export function CAPIWebRtcNetworkPeekEm(lIndex: number, lTypeIntArray: Int32Array, lTypeIntIndex: number, lConidIntArray: Int32Array, lConidIndex: number, lDataUint8Array: Uint8Array, lDataOffset: number, lDataLength: number, lDataLenIntArray: Int32Array, lDataLenIntIndex: number) {
-    var nEvt = CAPIWebRtcNetworkPeek(lIndex);
+export function CAPI_WebRtcNetwork_PeekEm(lIndex: number, lTypeIntArray: Int32Array, lTypeIntIndex: number, lConidIntArray: Int32Array, lConidIndex: number, lDataUint8Array: Uint8Array, lDataOffset: number, lDataLength: number, lDataLenIntArray: Int32Array, lDataLenIntIndex: number) {
+    var nEvt = CAPI_WebRtcNetwork_Peek(lIndex);
     if (nEvt == null)
         return false;
 
@@ -234,7 +322,7 @@ export function CAPIWebRtcNetworkPeekEm(lIndex: number, lTypeIntArray: Int32Arra
     lConidIntArray[lConidIndex] = nEvt.ConnectionId.id;
 
     //console.debug("event" + nEvt.netEventType);
-    var length = CAPIWebRtcNetworkEventDataToUint8Array(nEvt.RawData, lDataUint8Array, lDataOffset, lDataLength);
+    var length = CAPI_WebRtcNetwork_EventDataToUint8Array(nEvt.RawData, lDataUint8Array, lDataOffset, lDataLength);
     lDataLenIntArray[lDataLenIntIndex] = length; //return the length if so the user knows how much of the given array is used
 
     return true;
@@ -242,22 +330,30 @@ export function CAPIWebRtcNetworkPeekEm(lIndex: number, lTypeIntArray: Int32Arra
 
 
 
-export function CAPIMediaNetwork_IsAvailable() : boolean{
+export function CAPI_MediaNetwork_IsAvailable() : boolean{
 
-    return true;
+    if(BrowserMediaNetwork && BrowserWebRtcCall)
+        return true;
+    return false;
 }
 
-export function CAPIMediaNetwork_Create(lJsonConfiguration):number {
+export function CAPI_MediaNetwork_HasUserMedia() : boolean{
+    if(navigator && navigator.mediaDevices)
+        return true;
+    return false;
+}
+
+export function CAPI_MediaNetwork_Create(lJsonConfiguration):number {
     
     let config = new NetworkConfig();
     config = JSON.parse(lJsonConfiguration);
 
     let mediaNetwork = new BrowserMediaNetwork(config);
 
-    var lIndex = gCAPIWebRtcNetworkInstancesNextIndex;
-    gCAPIWebRtcNetworkInstancesNextIndex++;
+    var lIndex = gCAPI_WebRtcNetwork_InstancesNextIndex;
+    gCAPI_WebRtcNetwork_InstancesNextIndex++;
 
-    gCAPIWebRtcNetworkInstances[lIndex] = mediaNetwork;
+    gCAPI_WebRtcNetwork_Instances[lIndex] = mediaNetwork;
     return lIndex;
 }
 
@@ -268,7 +364,7 @@ export function CAPIMediaNetwork_Create(lJsonConfiguration):number {
 
 
 //Configure(config: MediaConfig): void;
-export function CAPIMediaNetwork_Configure(lIndex:number, audio: boolean, video: boolean,
+export function CAPI_MediaNetwork_Configure(lIndex:number, audio: boolean, video: boolean,
     minWidth: number, minHeight: number,
     maxWidth: number, maxHeight: number,
     idealWidth: number, idealHeight: number,
@@ -292,38 +388,38 @@ export function CAPIMediaNetwork_Configure(lIndex:number, audio: boolean, video:
 
     config.FrameUpdates = true;
     
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     mediaNetwork.Configure(config);
 
 }
 //GetConfigurationState(): MediaConfigurationState;
-export function CAPIMediaNetwork_GetConfigurationState(lIndex: number): number{
+export function CAPI_MediaNetwork_GetConfigurationState(lIndex: number): number{
     
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.GetConfigurationState() as number;
 }
 
 //Note: not yet glued to the C# version!
 //GetConfigurationError(): string;
-export function CAPIMediaNetwork_GetConfigurationError(lIndex: number): string {
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+export function CAPI_MediaNetwork_GetConfigurationError(lIndex: number): string {
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.GetConfigurationError();
 
 }
 
 //ResetConfiguration(): void;
-export function CAPIMediaNetwork_ResetConfiguration(lIndex: number) : void {
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+export function CAPI_MediaNetwork_ResetConfiguration(lIndex: number) : void {
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.ResetConfiguration();
 }
 
 //TryGetFrame(id: ConnectionId): RawFrame;
-export function CAPIMediaNetwork_TryGetFrame(lIndex: number, lConnectionId: number,
+export function CAPI_MediaNetwork_TryGetFrame(lIndex: number, lConnectionId: number,
             lWidthInt32Array: Int32Array, lWidthIntArrayIndex: number, 
             lHeightInt32Array: Int32Array, lHeightIntArrayIndex: number,
             lBufferUint8Array: Uint8Array, lBufferUint8ArrayOffset: number, lBufferUint8ArrayLength: number): boolean
 {
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     let frame = mediaNetwork.TryGetFrame(new ConnectionId(lConnectionId));
 
     if (frame == null || frame.Buffer == null) {
@@ -343,8 +439,8 @@ export function CAPIMediaNetwork_TryGetFrame(lIndex: number, lConnectionId: numb
 }
 
 //Returns the frame buffer size or -1 if no frame is available
-export function CAPIMediaNetwork_TryGetFrameDataLength(lIndex: number, connectionId: number) : number {
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+export function CAPI_MediaNetwork_TryGetFrameDataLength(lIndex: number, connectionId: number) : number {
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     let frame = mediaNetwork.PeekFrame(new ConnectionId(connectionId));
 
     let length: number = -1;
@@ -358,32 +454,32 @@ export function CAPIMediaNetwork_TryGetFrameDataLength(lIndex: number, connectio
     //SLog.L("data length:" + length);
     return length;
 }
-export function CAPIMediaNetwork_SetVolume(lIndex: number, volume: number, connectionId: number) : void {
+export function CAPI_MediaNetwork_SetVolume(lIndex: number, volume: number, connectionId: number) : void {
 
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     mediaNetwork.SetVolume(volume, new ConnectionId(connectionId));
 }
 
-export function CAPIMediaNetwork_HasAudioTrack(lIndex: number, connectionId: number): boolean
+export function CAPI_MediaNetwork_HasAudioTrack(lIndex: number, connectionId: number): boolean
 {
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.HasAudioTrack(new ConnectionId(connectionId));
 }
-export function CAPIMediaNetwork_HasVideoTrack(lIndex: number, connectionId: number): boolean {
+export function CAPI_MediaNetwork_HasVideoTrack(lIndex: number, connectionId: number): boolean {
 
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.HasVideoTrack(new ConnectionId(connectionId));
 }
 
-export function CAPIMediaNetwork_SetMute(lIndex: number, value: boolean)
+export function CAPI_MediaNetwork_SetMute(lIndex: number, value: boolean)
 {
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     mediaNetwork.SetMute(value);
 }
 
-export function CAPIMediaNetwork_IsMute(lIndex: number)
+export function CAPI_MediaNetwork_IsMute(lIndex: number)
 {
-    let mediaNetwork = gCAPIWebRtcNetworkInstances[lIndex] as BrowserMediaNetwork;
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.IsMute();
 }
 
@@ -416,21 +512,4 @@ export function CAPI_DeviceApi_Devices_Get(index:number):string{
         SLog.LE("Requested device with index " + index + " does not exist.");
         return "";
     }
-}
-/**
- * 
- * @param loglevel 
- * None = 0,
- * Errors = 1,
- * Warnings = 2,
- * Verbose = 3
- */
-export function CAPI_SLog_SetLogLevel(loglevel:number)
-{
-    if(loglevel < 0 || loglevel > 3)
-    {
-        SLog.LogError("Invalid log level " + loglevel);
-        return;
-    }
-    SLog.SetLogLevel(loglevel);
 }
