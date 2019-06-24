@@ -143,7 +143,20 @@ export class BrowserMediaStream {
             if(this.mVideoElement == null)
                 return;
 
-            this.mVideoElement.play();
+                var playPromise = this.mVideoElement.play();
+
+                if (typeof playPromise !== "undefined")
+                {
+                    playPromise.then(function() {
+                        //all good
+                    }).catch(function(error) {
+                        //so far we can't handle this error automatically. Some situation this might trigger
+                        //Chrome & Firefox: User only receives audio but doesn't send it & the call was initiated without the user pressing a button.
+                        //Safari: This seems to trigger always on safari unless the user manually allows autoplay
+                        SLog.LE("Replay of video failed. This error is likely caused due to autoplay restrictions of the browser. Try allowing autoplay.");
+                        console.error(error);
+                    });
+                }
             if(this.InternalStreamAdded != null)
                 this.InternalStreamAdded(this);
 
