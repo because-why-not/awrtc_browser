@@ -1,6 +1,6 @@
 {
   "name": "awrtc_browser",
-  "version": "0.98.4",
+  "version": "0.984.0",
   "description": "",
   "author": "because-why-not.com Limited",
   "license": "BSD-3-Clause",
@@ -14,15 +14,19 @@
   "devDependencies": {
     "@types/jasmine": "^2.8.16",
     "jasmine": "^2.99.0",
-    "karma-firefox-launcher": "^1.1.0",
+    "jasmine-core": "^3.4.0",
+    "karma": "^4.2.0",
+    "karma-chrome-launcher": "^2.2.0",
+    "karma-firefox-launcher": "^1.2.0",
+    "karma-jasmine": "^2.0.1",
     "shx": "^0.3.2",
     "source-map-loader": "^0.2.4",
     "ts-loader": "^5.4.5",
     "tsconfig-paths-webpack-plugin": "^3.2.0",
-    "typescript": "^3.5.2",
+    "typescript": "^3.5.3",
     "uglify-js": "^2.8.29",
-    "webpack": "^4.35.0",
-    "webpack-cli": "^3.3.5",
+    "webpack": "^4.39.2",
+    "webpack-cli": "^3.3.6",
     "webrtc-adapter": "^6.4.8"
   }
 }
