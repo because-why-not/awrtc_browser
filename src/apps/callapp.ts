@@ -255,6 +255,13 @@ export class CallApp
             let messageArgs = args as awrtc.DataMessageEventArgs;
             this.mCall.SendData(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
         }
+        else if (args.Type == awrtc.CallEventType.CallAccepted) {
+            let arg = args as awrtc.CallAcceptedEventArgs;
+            console.log("New call accepted id: " + arg.ConnectionId.id);
+        }
+        else if (args.Type == awrtc.CallEventType.WaitForIncomingCall) {
+            console.log("Waiting for incoming call ...");
+        }
         else {
             console.log("Unhandled event: " + args.Type);
         }

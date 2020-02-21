@@ -138,10 +138,12 @@ export abstract class AWebRtcPeer {
     private SetupPeer(rtcConfig: RTCConfiguration): void {
         
         this.mPeer = new RTCPeerConnection(rtcConfig);
-        this.mPeer.onicecandidate = (ev: RTCPeerConnectionIceEvent) => { this.OnIceCandidate(ev); };
-        this.mPeer.oniceconnectionstatechange = (ev: Event) => { this.OnIceConnectionChange(); };
-        this.mPeer.onnegotiationneeded = (ev: Event) => { this.OnRenegotiationNeeded(); };
-        this.mPeer.onsignalingstatechange = (ev: Event) => { this.OnSignalingChange(); };
+        this.mPeer.onicecandidate = this.OnIceCandidate;
+        this.mPeer.oniceconnectionstatechange =  this.OnIceConnectionStateChange; 
+        this.mPeer.onconnectionstatechange = this.OnConnectionStateChange;
+        this.mPeer.onicegatheringstatechange = this.OnIceGatheringStateChange;
+        this.mPeer.onnegotiationneeded = this.OnRenegotiationNeeded;
+        this.mPeer.onsignalingstatechange = this.OnSignalingChange;
 
     }
     
@@ -399,12 +401,17 @@ export abstract class AWebRtcPeer {
     }
     protected RtcSetClosed(): void {
         if (this.mRtcInternalState == WebRtcInternalState.Connected)
+        {
+            Debug.Log("triggering closure");
             this.mRtcInternalState = WebRtcInternalState.Closed;
+        }
+            
     }
 
     
 
-    private OnIceCandidate(ev: RTCPeerConnectionIceEvent): void {
+    private OnIceCandidate = (ev: RTCPeerConnectionIceEvent): void =>
+    {
         if (ev && ev.candidate) {
             let candidate = ev.candidate;
             let msg: string = JSON.stringify(candidate);
@@ -412,9 +419,13 @@ export abstract class AWebRtcPeer {
         }
     }
 
-    private OnIceConnectionChange(): void {
-        Debug.Log(this.mPeer.iceConnectionState);
-        if (this.mPeer.iceConnectionState == "failed") {
+
+    private OnIceConnectionStateChange = (ev: Event): void =>
+    {
+        Debug.Log("on ice connection state: " + this.mPeer.iceConnectionState);
+        //Chrome stopped emitting "failed" events. We have to react to disconnected events now
+        if (this.mPeer.iceConnectionState == "failed" || this.mPeer.iceConnectionState == "disconnected")
+        {
             if(this.mState == WebRtcPeerState.Signaling)
             {
                 this.RtcSetSignalingFailed();
@@ -425,15 +436,27 @@ export abstract class AWebRtcPeer {
         }
     }
 
-    private OnIceGatheringChange(/*new_state: RTCIceGatheringState*/): void {
-        Debug.Log(this.mPeer.iceGatheringState);
+    /*
+    So far useless. never triggered in firefox.
+    In Chrome it triggers together with the DataChannels opening which might be more useful in the future
+    */
+    private OnConnectionStateChange = (ev:Event): void =>
+    {
+        //Debug.Log("on connection state change: " + this.mPeer.iceConnectionState);
     }
 
-    private OnRenegotiationNeeded(): void
+    private OnIceGatheringStateChange = (ev:Event): void =>
+    {
+        //Debug.Log("ice gathering change: " + this.mPeer.iceGatheringState);
+    }
+
+    private OnRenegotiationNeeded = (ev:Event): void =>
     { }
 
-    private OnSignalingChange(/*new_state: RTCSignalingState*/): void {
-        Debug.Log(this.mPeer.signalingState);
+    //broken in chrome. won't switch to closed anymore
+    private OnSignalingChange = (ev:Event): void =>
+    {
+        Debug.Log("on signaling change:" + this.mPeer.signalingState);
         if (this.mPeer.signalingState == "closed") {
             this.RtcSetClosed();
         }

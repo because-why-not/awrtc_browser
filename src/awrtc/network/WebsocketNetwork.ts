@@ -438,8 +438,17 @@ export class WebsocketNetwork implements IBasicNetwork  {
             this.HandleOutgoingEvents();
     }
     public SendData(id: ConnectionId, data: Uint8Array, /*offset: number, length: number,*/ reliable: boolean): boolean {
-        if (id == null || data == null || data.length == 0)
+        if (id == null || id.id == ConnectionId.INVALID.id)
+        {
+            SLog.LW("Ignored message. Invalid connection id.");
             return;
+        }
+        if (data == null || data.length == 0)
+        {
+            SLog.LW("Ignored message. Invalid data.");
+            return;
+        }
+
         var evt: NetworkEvent;
         if (reliable) {
             evt = new NetworkEvent(NetEventType.ReliableMessageReceived, id, data);

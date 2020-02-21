@@ -172,7 +172,9 @@ export class WebRtcNetwork implements IBasicNetwork {
     }
 
     public Shutdown(): void {
-        for (var id of this.mConnectionIds) {
+        //bugfix. Make copy before the loop as Disconnect changes the original mConnectionIds array
+        let ids = this.mConnectionIds.slice();
+        for (var id of ids) {
             this.Disconnect(id);
         }
         this.StopServer();
@@ -374,12 +376,14 @@ export class WebRtcNetwork implements IBasicNetwork {
         if (peer) {
             peer.Dispose();
         }
-        //??? this looks buggy. the connection id could be a reference with the same id and would not be recognized
-        let index = this.mConnectionIds.indexOf(id);
+        //search for the index to remove the id (user might provide a different object with the same id
+        //don't use indexOf!
+        let index = this.mConnectionIds.findIndex( e => e.id == id.id);
         if (index != -1) {
             this.mConnectionIds.splice(index, 1);
+            delete this.mIdToConnection[id.id];
         }
-        delete this.mIdToConnection[id.id];
+        
         let ev = new NetworkEvent(NetEventType.Disconnected, id, null);
         this.mEvents.Enqueue(ev);
     }

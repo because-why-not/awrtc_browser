@@ -71,6 +71,15 @@ describe("DeviceApiTest", () => {
             deviceCount = Object.keys(devices1).length;
             expect(deviceCount).toBeGreaterThan(0);
             let key1 = Object.keys(devices1)[0];
+
+            //these tests don't work anymore due to forcing permissions for devices in
+            //unit tests. 
+            //In a real browser we don't have access to device names until GetUserMedia
+            //returned. Meaning the API will fill in the names using "videoinput 1"
+            //"videoinput 2" and so on. 
+            //Now the tests force permissions = true so we already have full
+            //access at the start
+            /*
             expect(devices1[key1].label).toBe("videoinput 1");
             expect(devices1[key1].isLabelGuessed).toBe(true);
             if(deviceCount > 1)
@@ -79,6 +88,7 @@ describe("DeviceApiTest", () => {
                 expect(devices1[key2].label).toBe("videoinput 2");
                 expect(devices1[key2].isLabelGuessed).toBe(true);
             }
+            */
             
 
             DeviceApi.RemOnChangedHandler(updatecall1);
