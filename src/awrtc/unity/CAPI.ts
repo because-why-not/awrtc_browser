@@ -32,7 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 import {SLog, WebRtcNetwork, SignalingConfig, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork} from "../network/index"
 import { MediaConfigurationState, NetworkConfig, MediaConfig } from "../media/index";
-import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall } from "../media_browser/index";
+import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media } from "../media_browser/index";
 
 
 var CAPI_InitMode = {
@@ -496,7 +496,7 @@ export function CAPI_DeviceApi_LastUpdate():number
 {
     return DeviceApi.LastUpdate;
 }
-
+/*
 export function CAPI_DeviceApi_Devices_Length():number{
     return Object.keys(DeviceApi.Devices).length;
 }
@@ -510,6 +510,24 @@ export function CAPI_DeviceApi_Devices_Get(index:number):string{
     else
     {
         SLog.LE("Requested device with index " + index + " does not exist.");
+        return "";
+    }
+}
+*/
+
+export function CAPI_DeviceApi_Devices_Length():number{
+    return Media.SharedInstance.GetVideoDevices().length;
+}
+export function CAPI_DeviceApi_Devices_Get(index:number):string{
+    const devs = Media.SharedInstance.GetVideoDevices();
+    if(devs.length > index)
+    {
+        return devs[index];
+    }
+    else
+    {
+        SLog.LE("Requested device with index " + index + " does not exist.");
+        //it needs to be "" to behave the same to the C++ API. std::string can't be null
         return "";
     }
 }

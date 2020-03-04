@@ -11,6 +11,7 @@
     "tsc": "tsc",
     "webpack": "webpack",
     "build": "webpack && tsc -p ./src/awrtc",
+    "watch": "webpack --watch",
     "clean": "shx rm -rf ./build/awrtc ./build/bundle"
   },
   "devDependencies": {

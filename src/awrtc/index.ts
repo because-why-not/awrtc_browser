@@ -42,4 +42,5 @@ export * from "./media/index"
 //it could as well be built and deployed separately
 export * from "./media_browser/index"
 export * from "./unity/index"
-console.debug("loading awrtc modules completed");
+console.debug("loading awrtc modules completed!");
+

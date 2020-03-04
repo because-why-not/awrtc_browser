@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { BrowserMediaNetwork, NetworkConfig, MediaConfig,
      ConnectionId, MediaEvent, MediaEventType,
-      MediaConfigurationState, NetEventType } from "../awrtc/index";
+      MediaConfigurationState, NetEventType, BrowserMediaStream } from "../awrtc/index";
 
 
 export class MediaNetworkTest{
@@ -77,7 +77,8 @@ export class MediaNetworkTest{
 
         });
 
-        it("MediaEvent", (done) => {
+        it("MediaEventLocal", (done) => {
+            BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
 
             let mediaConfig = new MediaConfig();
             let network = this.createDefault();
@@ -88,6 +89,7 @@ export class MediaNetworkTest{
                 let evt : MediaEvent = null;
                 while((evt = network.DequeueMediaEvent()) != null)
                 {
+                    console.log("Stream added",evt );
                     expect(evt.EventType).toBe(MediaEventType.StreamAdded);
                     expect(evt.Args.videoHeight).toBeGreaterThan(0);
                     expect(evt.Args.videoWidth).toBeGreaterThan(0);
@@ -100,7 +102,7 @@ export class MediaNetworkTest{
 
 
         it("MediaEventRemote", (done) => {
-            
+            BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
             let testaddress = "testaddress" + Math.random();
             let sender = this.createDefault();
             let receiver = this.createDefault();
@@ -167,9 +169,9 @@ export class MediaNetworkTest{
 
                 if(senderFrame && receiverFrame)
                     done();
-            }, 10);
+            }, 40);
 
-        });
+        }, 15000);
     }
 }
 

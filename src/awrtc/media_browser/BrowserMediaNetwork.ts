@@ -36,6 +36,7 @@ import { IFrameData } from "../media/RawFrame";
 import { MediaPeer } from "./MediaPeer";
 import { BrowserMediaStream } from "./BrowserMediaStream";
 import { DeviceApi } from "./DeviceApi";
+import { Media } from "./Media";
 
 
 /**Avoid using this class directly whenever possible. Use BrowserWebRtcCall instead. 
@@ -60,6 +61,7 @@ import { DeviceApi } from "./DeviceApi";
  */
 export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork {
 
+
     //media configuration set by the user
     private mMediaConfig: MediaConfig = null;
     //keeps track of audio / video tracks based on local devices
@@ -68,6 +70,7 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
     private mConfigurationState: MediaConfigurationState = MediaConfigurationState.Invalid;
     private mConfigurationError: string = null;
     private mMediaEvents: Queue<MediaEvent> = new Queue<MediaEvent>();
+
 
     constructor(config: NetworkConfig) {
 
@@ -91,102 +94,13 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
 
 
         if (config.Audio || config.Video) {
-
-            //ugly part starts -> call get user media data (no typescript support)
-            //different browsers have different calls...
-
-            //check  getSupportedConstraints()??? 
-            //see https://w3c.github.io/mediacapture-main/getusermedia.html#constrainable-interface
-
-            //set default ideal to very common low 320x240 to avoid overloading weak computers
-            var constraints = {
-                audio: config.Audio
-            } as any;
-
-
-            
-            let width = {} as any;
-            let height = {} as any;
-            let video = {} as any;
-            let fps = {} as any;
-            
-            if (config.MinWidth != -1)
-                width.min = config.MinWidth;
-    
-            if (config.MaxWidth != -1)
-                width.max = config.MaxWidth;
-            
-            if (config.IdealWidth != -1)
-                width.ideal = config.IdealWidth;
-            
-            if (config.MinHeight != -1)
-                height.min = config.MinHeight;
-
-            if (config.MaxHeight != -1)
-                height.max = config.MaxHeight;
-
-            if (config.IdealHeight != -1)
-                height.ideal = config.IdealHeight;
-            
-            
-            if (config.MinFps != -1)
-                fps.min = config.MinFps;
-            if (config.MaxFps != -1)
-                fps.max = config.MaxFps;
-            if (config.IdealFps != -1)
-                fps.ideal = config.IdealFps;
+            SLog.L("calling GetUserMedia. Media config: " + JSON.stringify(config));
+            if(DeviceApi.IsUserMediaAvailable())
+            {
+                let promise : Promise<MediaStream> = null;
+                promise = Media.SharedInstance.getUserMedia(config);
+                 
                 
-
-            //user requested specific device? get it now to properly add it to the
-            //constraints later
-            let deviceId:string = null;
-            if(config.Video && config.VideoDeviceName && config.VideoDeviceName !== "")
-            {
-                deviceId = DeviceApi.GetDeviceId(config.VideoDeviceName);
-                SLog.L("using device " + config.VideoDeviceName);
-                if(deviceId !== null)
-                {
-                    //SLog.L("using device id " + deviceId);
-                }
-                else{
-                    SLog.LE("Failed to find deviceId for label " + config.VideoDeviceName);
-                }
-            }
-            //watch out: unity changed behaviour and will now
-            //give 0 / 1 instead of false/true
-            //using === won't work
-            if(config.Video == false)
-            {
-                //video is off
-                video = false;
-            }else {
-                if(Object.keys(width).length > 0){
-                    video.width = width;
-                }
-                if(Object.keys(height).length > 0){
-                    video.height = height;
-                }
-                if(Object.keys(fps).length > 0){
-                    video.frameRate = fps;
-                }
-                if(deviceId !== null){
-                    video.deviceId = {"exact":deviceId};
-                }
-                
-                //if we didn't add anything we need to set it to true
-                //at least (I assume?)
-                if(Object.keys(video).length == 0){
-                    video = true;
-                }
-            }
-
-
-            constraints.video = video;
-
-            SLog.L("calling GetUserMedia. Media constraints: " + JSON.stringify(constraints));
-            if(navigator && navigator.mediaDevices)
-            {
-                let promise = navigator.mediaDevices.getUserMedia(constraints);
                 promise.then((stream) => { //user gave permission
     
                         //totally unrelated -> user gave access to devices. use this
@@ -195,6 +109,7 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
                     
                         //call worked -> setup a frame buffer that deals with the rest
                         this.mLocalStream = new BrowserMediaStream(stream as MediaStream);
+                        //console.debug("Local tracks: ", stream.getTracks());
                         this.mLocalStream.InternalStreamAdded = (stream)=>{
                             this.EnqueueMediaEvent(MediaEventType.StreamAdded, ConnectionId.INVALID, this.mLocalStream.VideoElement);
                         };

@@ -1,55 +1,12 @@
-/*
-Copyright (c) 2019, because-why-not.com Limited
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-* Redistributions of source code must retain the above copyright notice, this
-  list of conditions and the following disclaimer.
-
-* Redistributions in binary form must reproduce the above copyright notice,
-  this list of conditions and the following disclaimer in the documentation
-  and/or other materials provided with the distribution.
-
-* Neither the name of the copyright holder nor the names of its
-  contributors may be used to endorse or promote products derived from
-  this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
 
 import * as awrtc from "../awrtc/index"
 
 /**
- * Main (and most complicated) example for using BrowserWebRtcCall.
- * Have a look at examples.html for easier scenarios.
- * 
- * 
- * 
- * Features:
- * - Build a "Join" system on top of the regular Listen / Call model to make it easier to use. 
- * - basic user interface (This is for easy testing not for use as a final application!!! Write your own using the API)
- * - setup to be compatible with the Unity Asset's CallApp (but without TURN server!)
- * - Get parameters from the address line to configure the call
- * - autostart the call (this might not work in all browsers. Mostly used for testing)
- * Todo:
- * - text message system (so far it sends back the same message)
- * - conference call support 
- * 
- * 
+ * Copy of the CallApp to test custom video input
  */
-export class CallApp
+export class VideoInputApp
 {
+    public static sVideoDevice = null;
     private mAddress;
     private mNetConfig = new awrtc.NetworkConfig();
     private mCall : awrtc.BrowserWebRtcCall = null;
@@ -118,6 +75,10 @@ export class CallApp
         config.IdealWidth = 640;
         config.IdealHeight = 480;
         config.IdealFps = 30;
+        if(VideoInputApp.sVideoDevice !== null)
+        {
+            config.VideoDeviceName = VideoInputApp.sVideoDevice;
+        }
         
         //For usage in HTML set FrameUpdates to false and wait for  MediaUpdate to
         //get the VideoElement. By default awrtc would deliver frames individually
@@ -408,10 +369,9 @@ export class CallApp
 }
 
 
-
-export function callapp(parent: HTMLElement)
+export function videoinputapp(parent: HTMLElement, canvas: HTMLCanvasElement)
 {
-    let callApp : CallApp;
+    let callApp : VideoInputApp;
     console.log("init callapp");
     if(parent == null)
     {
@@ -419,7 +379,12 @@ export function callapp(parent: HTMLElement)
         parent = document.body;
     }
     awrtc.SLog.SetLogLevel(awrtc.SLogLevel.Info);
-    callApp = new CallApp();
+    callApp = new VideoInputApp();
+    const media = new awrtc.Media();
+    const devname = "canvas";
+    awrtc.Media.SharedInstance.VideoInput.AddCanvasDevice(devname, canvas);
+    VideoInputApp.sVideoDevice = devname;
+
     callApp.setupUi(parent);
 
 }

@@ -213,22 +213,42 @@ export class SLog {
         SLog.LogError(msg, tag);
     }
     public static Log(msg: any, tag?:string): void {
-        if(!tag)
-            tag = "";
+        
         if(SLog.sLogLevel >= SLogLevel.Info)
-            console.log(msg, tag);
+        {
+            if(tag)
+            {
+                console.log(msg, tag);
+            }else{
+                console.log(msg);
+            }
+        }
     }
     public static LogWarning(msg: any, tag?:string): void {
         if(!tag)
             tag = "";
         if(SLog.sLogLevel >= SLogLevel.Warnings)
-            console.warn(msg, tag);
+        {
+            if(tag)
+            {
+                console.warn(msg, tag);
+            }else{
+                console.warn(msg);
+            }
+        }
     }
 
     public static LogError(msg: any, tag?:string) {
-        if(!tag)
-            tag = "";
+        
         if(SLog.sLogLevel >= SLogLevel.Errors)
-            console.error(msg, tag);
+        {
+            if(tag)
+            {
+                console.error(msg, tag);
+            }else{
+                console.error(msg);
+            }
+        }
+            
     }
 }
