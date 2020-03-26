@@ -1,17 +1,25 @@
 {
   "name": "awrtc_browser",
-  "version": "0.984.4",
-  "description": "",
+  "version": "1.9844.0",
+  "description": "Compatible browser implementation to the Unity asset WebRTC Video Chat. Try examples in build folder",
   "author": "because-why-not.com Limited",
   "license": "BSD-3-Clause",
   "dependencies": {},
-  "main": "build/awrtc/index.js",
+  "main": "build/bundle/awrtc.js",
   "types": "build/awrtc/index.d.ts",
   "scripts": {
     "tsc": "tsc",
     "webpack": "webpack",
     "build": "webpack && tsc -p ./src/awrtc",
     "clean": "shx rm -rf ./build/awrtc ./build/bundle"
+  },
+  "files": [
+    "build",
+    "src"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/because-why-not/awrtc_browser"
   },
   "devDependencies": {
     "@types/jasmine": "^2.8.16",
