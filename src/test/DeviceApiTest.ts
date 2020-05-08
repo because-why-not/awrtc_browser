@@ -132,12 +132,13 @@ describe("DeviceApiTest", () => {
         let update2complete = false;
 
         let deviceCount = 0;
-        expect(CAPI_DeviceApi_Devices_Length()).toBe(0);
-        CAPI_DeviceApi_Update();
+        const devices_length_unitialized = CAPI_DeviceApi_Devices_Length();
+        expect(devices_length_unitialized).toBe(0);
+        DeviceApi.AddOnChangedHandler(()=>{
 
-        setTimeout(()=>{
-            expect(CAPI_DeviceApi_Devices_Length()).not.toBe(0);
-            expect(CAPI_DeviceApi_Devices_Length()).toBe(Object.keys(DeviceApi.Devices).length);
+            let dev_length = CAPI_DeviceApi_Devices_Length();
+            expect(dev_length).not.toBe(0);
+            expect(dev_length).toBe(Object.keys(DeviceApi.Devices).length);
             
             let keys = Object.keys(DeviceApi.Devices);
             let counter = 0;
@@ -150,7 +151,9 @@ describe("DeviceApiTest", () => {
                 counter++;
             }
             done();
-        }, 100);
+        });
+        CAPI_DeviceApi_Update();
+        
     });
     
 });

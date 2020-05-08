@@ -144,12 +144,13 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
             {
                 deviceId = DeviceApi.GetDeviceId(config.VideoDeviceName);
                 SLog.L("using device " + config.VideoDeviceName);
-                if(deviceId !== null)
+                if(deviceId !== null && deviceId !== "")
                 {
                     //SLog.L("using device id " + deviceId);
                 }
                 else{
-                    SLog.LE("Failed to find deviceId for label " + config.VideoDeviceName);
+                    deviceId = null;
+                    SLog.LW("Failed to find deviceId for label " + config.VideoDeviceName + "! Using default device instead");
                 }
             }
             //watch out: unity changed behaviour and will now
