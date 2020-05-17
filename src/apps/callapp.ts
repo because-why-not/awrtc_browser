@@ -186,7 +186,7 @@ export class CallApp
 
         //User gave access to requested camera/ microphone
         if (args.Type == awrtc.CallEventType.ConfigurationComplete){
-            console.log("configuration complete");
+            this.Log("configuration complete");
         }
         else if (args.Type == awrtc.CallEventType.MediaUpdate) {
             
@@ -196,14 +196,14 @@ export class CallApp
                 var videoElement = margs.VideoElement;
                 this.mLocalVideo = videoElement;
                 this.Ui_OnLocalVideo(videoElement);
-                console.log("local video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
+                this.Log("local video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
             }
             else if (margs.ConnectionId != awrtc.ConnectionId.INVALID && this.mRemoteVideo[margs.ConnectionId.id] == null) {
                 
                 var videoElement = margs.VideoElement;
                 this.mRemoteVideo[margs.ConnectionId.id] = videoElement;
                 this.Ui_OnRemoteVideo(videoElement, margs.ConnectionId);
-                console.log("remote video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
+                this.Log("remote video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
             }
         }
         else if (args.Type == awrtc.CallEventType.ListeningFailed) {
@@ -234,7 +234,7 @@ export class CallApp
         else if (args.Type == awrtc.CallEventType.CallEnded) {
             //call ended or was disconnected
             var callEndedEvent = args as awrtc.CallEndedEventArgs;
-            console.log("call ended with id " + callEndedEvent.ConnectionId.id);
+            this.Log("call ended with id " + callEndedEvent.ConnectionId.id);
             delete this.mRemoteVideo[callEndedEvent.ConnectionId.id];
             this.Ui_OnLog("Disconnected from user with id " + callEndedEvent.ConnectionId.id);
             //check if this was the last user
@@ -248,6 +248,7 @@ export class CallApp
         else if (args.Type == awrtc.CallEventType.Message) {
             //no ui for this yet. simply echo messages for testing
             let messageArgs = args as awrtc.MessageEventArgs;
+            this.Ui_OnMessage(messageArgs.ConnectionId.id, messageArgs.Content);
             this.mCall.Send(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
         }
         else if (args.Type == awrtc.CallEventType.DataMessage) {
@@ -257,13 +258,13 @@ export class CallApp
         }
         else if (args.Type == awrtc.CallEventType.CallAccepted) {
             let arg = args as awrtc.CallAcceptedEventArgs;
-            console.log("New call accepted id: " + arg.ConnectionId.id);
+            this.Log("New call accepted id: " + arg.ConnectionId.id);
         }
         else if (args.Type == awrtc.CallEventType.WaitForIncomingCall) {
-            console.log("Waiting for incoming call ...");
+            this.Log("Waiting for incoming call ...");
         }
         else {
-            console.log("Unhandled event: " + args.Type);
+            this.Log("Unhandled event: " + args.Type);
         }
     }
 
@@ -279,6 +280,7 @@ export class CallApp
     private mUiUrl: HTMLElement;
     private mUiLocalVideoParent: HTMLElement;
     private mUiRemoteVideoParent: HTMLElement;
+    private mOutput: HTMLTextAreaElement;
 
     public setupUi(parent : HTMLElement)
     {
@@ -289,6 +291,7 @@ export class CallApp
         this.mUiButton = parent.querySelector<HTMLInputElement>(".callapp_button");
         this.mUiLocalVideoParent =  parent.querySelector<HTMLParagraphElement>(".callapp_local_video");
         this.mUiRemoteVideoParent =  parent.querySelector<HTMLParagraphElement>(".callapp_remote_video");
+        this.mOutput = parent.querySelector<HTMLTextAreaElement>(".callapp_output");
         this.mUiAudio.onclick = this.Ui_OnUpdate;
         this.mUiVideo.onclick = this.Ui_OnUpdate;
         this.mUiAddress.onkeyup = this.Ui_OnUpdate;
@@ -327,11 +330,11 @@ export class CallApp
 
         if(this.mAutostart)
         {
-            console.log("Starting automatically ... ")
+            this.Log("Starting automatically ... ")
             this.Start(this.mAddress, this.mAudio , this.mVideo ); 
         } 
 
-        console.log("address: " + this.mAddress + " audio: " + this.mAudio  + " video: " + this.mVideo  + " autostart: " + this.mAutostart);
+        this.Log("address: " + this.mAddress + " audio: " + this.mAudio  + " video: " + this.mVideo  + " autostart: " + this.mAutostart);
     }
     private Ui_OnStart(){
         this.mUiButton.textContent = "Stop";
@@ -346,8 +349,14 @@ export class CallApp
             this.mUiRemoteVideoParent.removeChild(this.mUiRemoteVideoParent.firstChild);
         }
     }
-    private Ui_OnLog(msg:string){
+    private Ui_OnMessage(id: number, txt: string){
+        let msg_output = id + ": " + txt;
+        this.Ui_Output(msg_output);
+    }
 
+    private Ui_OnLog(msg:string){
+        console.log(msg);
+        this.Ui_Output(msg);
     }
     private Ui_OnError(msg:string){
 
@@ -385,11 +394,19 @@ export class CallApp
 
     public Ui_Update() : void
     {
-        console.log("UpdateUi");
+        this.Log("UpdateUi");
         this.mUiAddress.value = this.mAddress;
         this.mUiAudio.checked = this.mAudio ;
         this.mUiVideo.checked = this.mVideo ;
         this.mUiUrl.innerHTML = this.GetUrl();
+    }
+    private Ui_Output(txt: string){
+        if(this.mOutput)
+            this.mOutput.value = this.mOutput.value + txt + "\n";
+    }
+
+    private Log(msg:string){
+        this.Ui_OnLog(msg);
     }
 
     
