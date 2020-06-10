@@ -34,26 +34,35 @@ export class Media{
         return real_devices.concat(virtual_devices);
     }
 
-    
+    public static IsNameSet(videoDeviceName: string) : boolean{
+
+        if(videoDeviceName !== null && videoDeviceName !== "" )
+        {
+            return true;
+        }
+        return false;
+    }
     
     public getUserMedia(config: MediaConfig): Promise<MediaStream>{
         
-        if(config.VideoDeviceName !== null 
-            && config.VideoDeviceName !== "" 
+        if(config.Video && Media.IsNameSet(config.VideoDeviceName) 
             && this.videoInput != null 
             && this.videoInput.HasDevice(config.VideoDeviceName))
         {
-            return new Promise<MediaStream>((resolve, reject) => {
 
-                try{
-                    const res :MediaStream = this.videoInput.GetStream(config.VideoDeviceName);
-                    resolve(res)
-                }catch(err)
+            let res = Promise.resolve().then(async ()=>{
+                let stream = this.videoInput.GetStream(config.VideoDeviceName);
+                if(config.Audio)
                 {
-                    reject(err);
-                }                
-             });
+                    let constraints = {} as MediaStreamConstraints
+                    constraints.audio = true;
+                    let audio_stream = await DeviceApi.getBrowserUserMedia(constraints);
+                    stream.addTrack(audio_stream.getTracks()[0])
+                }
+                return stream;
+            })
             
+            return res;
         }
 
         return DeviceApi.getAssetUserMedia(config);

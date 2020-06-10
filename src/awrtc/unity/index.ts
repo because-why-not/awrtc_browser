@@ -28,19 +28,6 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { Media } from "../media_browser/Media";
+import { GetUnityCanvas } from "./CAPI";
 
 export * from "./CAPI"
-//add the canvas to video input for testing.
-//done via timeout to avoid returning possible errors to unity loading routine
-setTimeout(()=>{
-  console.debug("trying to add canvas to video input");
-  const canvas = document.querySelector("canvas");
-  if(canvas)
-  {
-    Media.SharedInstance.VideoInput.AddCanvasDevice("canvas", canvas);
-    console.debug("Canvas added. Make sure to turn off unity local video if streaming from a canvas. Copying images from the canvas to Unity will heavily slow down the app!");
-  }else{
-    console.error("Adding canvas failed. No canvas found");
-  }
-  
-}, 10);

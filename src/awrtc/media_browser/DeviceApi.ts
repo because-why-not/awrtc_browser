@@ -352,9 +352,14 @@ export class DeviceApi
         {
             deviceId = DeviceApi.GetDeviceId(config.VideoDeviceName);
             SLog.L("using device " + config.VideoDeviceName);
-            if(deviceId !== null)
+            if(deviceId === "")
             {
-                //SLog.L("using device id " + deviceId);
+                //Workaround for Chrome 81: If no camera access is allowed chrome returns the deviceId ""
+                //thus we can only request any video device. We can't select a specific one
+                deviceId = null;
+            }else if(deviceId !== null)
+            {
+                //all good
             }
             else{
                 SLog.LE("Failed to find deviceId for label " + config.VideoDeviceName);

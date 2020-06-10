@@ -32,7 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 import {SLog, WebRtcNetwork, SignalingConfig, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork} from "../network/index"
 import { MediaConfigurationState, NetworkConfig, MediaConfig } from "../media/index";
-import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media } from "../media_browser/index";
+import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media, VideoInputType } from "../media_browser/index";
 
 
 var CAPI_InitMode = {
@@ -425,15 +425,67 @@ export function CAPI_MediaNetwork_TryGetFrame(lIndex: number, lConnectionId: num
     if (frame == null || frame.Buffer == null) {
         return false;
     } else {
-
-
-        //TODO: copy frame over
         lWidthInt32Array[lWidthIntArrayIndex] = frame.Width;
         lHeightInt32Array[lHeightIntArrayIndex] = frame.Height;
 
         for (let i = 0; i < lBufferUint8ArrayLength && i < frame.Buffer.length; i++) {
             lBufferUint8Array[lBufferUint8ArrayOffset + i] = frame.Buffer[i];
         }
+        return true;
+    }
+}
+
+export function CAPI_MediaNetwork_TryGetFrame_ToTexture(lIndex: number, lConnectionId: number,
+    lWidth: number,
+    lHeight: number,
+    gl:WebGL2RenderingContext, texture:WebGLTexture): boolean
+{
+    //console.log("CAPI_MediaNetwork_TryGetFrame_ToTexture");
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
+    let frame = mediaNetwork.TryGetFrame(new ConnectionId(lConnectionId));
+
+    if (frame == null ) {
+        return false;
+    } else if (frame.Width !=  lWidth || frame.Height != lHeight) {
+        SLog.LW("CAPI_MediaNetwork_TryGetFrame_ToTexture failed. Width height expected: " + frame.Width + "x" + frame.Height + " but received " + lWidth + "x" + lHeight);
+        return false;
+    }else {
+        frame.ToTexture(gl, texture);
+        return true;
+    }
+}
+/*
+export function CAPI_MediaNetwork_TryGetFrame_ToTexture2(lIndex: number, lConnectionId: number,
+    lWidthInt32Array: Int32Array, lWidthIntArrayIndex: number, 
+    lHeightInt32Array: Int32Array, lHeightIntArrayIndex: number,
+    gl:WebGL2RenderingContext): WebGLTexture
+{
+    //console.log("CAPI_MediaNetwork_TryGetFrame_ToTexture");
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
+    let frame = mediaNetwork.TryGetFrame(new ConnectionId(lConnectionId));
+
+    if (frame == null) {
+        return false;
+    } else {
+        lWidthInt32Array[lWidthIntArrayIndex] = frame.Width;
+        lHeightInt32Array[lHeightIntArrayIndex] = frame.Height;
+        let texture  = frame.ToTexture2(gl);
+        return texture;
+    }
+}
+*/
+export function CAPI_MediaNetwork_TryGetFrame_Resolution(lIndex: number, lConnectionId: number,
+    lWidthInt32Array: Int32Array, lWidthIntArrayIndex: number, 
+    lHeightInt32Array: Int32Array, lHeightIntArrayIndex: number): boolean
+{
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
+    let frame = mediaNetwork.PeekFrame(new ConnectionId(lConnectionId));
+
+    if (frame == null) {
+        return false;
+    } else {
+        lWidthInt32Array[lWidthIntArrayIndex] = frame.Width;
+        lHeightInt32Array[lHeightIntArrayIndex] = frame.Height;
         return true;
     }
 }
@@ -496,29 +548,11 @@ export function CAPI_DeviceApi_LastUpdate():number
 {
     return DeviceApi.LastUpdate;
 }
-/*
-export function CAPI_DeviceApi_Devices_Length():number{
-    return Object.keys(DeviceApi.Devices).length;
-}
-export function CAPI_DeviceApi_Devices_Get(index:number):string{
-    let keys = Object.keys(DeviceApi.Devices);
-    if(keys.length > index)
-    {
-        let key = keys[index];
-        return DeviceApi.Devices[key].label;
-    }
-    else
-    {
-        SLog.LE("Requested device with index " + index + " does not exist.");
-        return "";
-    }
-}
-*/
 
-export function CAPI_DeviceApi_Devices_Length():number{
+export function CAPI_Media_GetVideoDevices_Length():number{
     return Media.SharedInstance.GetVideoDevices().length;
 }
-export function CAPI_DeviceApi_Devices_Get(index:number):string{
+export function CAPI_Media_GetVideoDevices(index:number):string{
     const devs = Media.SharedInstance.GetVideoDevices();
     if(devs.length > index)
     {
@@ -530,4 +564,48 @@ export function CAPI_DeviceApi_Devices_Get(index:number):string{
         //it needs to be "" to behave the same to the C++ API. std::string can't be null
         return "";
     }
+}
+
+
+export function CAPI_VideoInput_AddCanvasDevice(query:string, name:string,  width: number,  height: number,  fps: number): boolean{
+    let canvas = document.querySelector(query) as HTMLCanvasElement;
+    if(canvas){
+        console.debug("CAPI_VideoInput_AddCanvasDevice", {query, name, width, height, fps});
+        if(width <= 0 || height <= 0){
+            width = canvas.width;
+            height = canvas.height;
+        }
+        Media.SharedInstance.VideoInput.AddCanvasDevice(canvas as HTMLCanvasElement, name, width, height, fps);//, width, height, fps);
+        return true;
+    }
+    return false;
+}
+export function CAPI_VideoInput_AddDevice(name:string,  width: number,  height: number,  fps: number){
+    Media.SharedInstance.VideoInput.AddDevice(name, width, height, fps);
+}
+
+export function CAPI_VideoInput_RemoveDevice(name:string){
+    Media.SharedInstance.VideoInput.RemoveDevice(name);
+}
+export function CAPI_VideoInput_UpdateFrame(name:string,
+    lBufferUint8Array: Uint8Array, lBufferUint8ArrayOffset: number, lBufferUint8ArrayLength: number,
+    width: number, height: number,
+    rotation: number, firstRowIsBottom: boolean) : boolean
+{
+    let dataPtrClamped : Uint8ClampedArray = null;
+    if(lBufferUint8Array && lBufferUint8ArrayLength > 0){
+        dataPtrClamped = new Uint8ClampedArray(lBufferUint8Array.buffer, lBufferUint8ArrayOffset, lBufferUint8ArrayLength);
+    }
+    return Media.SharedInstance.VideoInput.UpdateFrame(name, dataPtrClamped,  width, height, VideoInputType.ARGB,  rotation, firstRowIsBottom);
+}
+
+//TODO: This needs a proper implementation
+//so far only works if unity is the only canvas and uses webgl2
+export function GetUnityCanvas() : HTMLCanvasElement
+{
+    return document.querySelector("canvas");
+}
+export function GetUnityContext() : WebGL2RenderingContext
+{
+    return GetUnityCanvas().getContext("webgl2");
 }

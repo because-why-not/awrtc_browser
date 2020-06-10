@@ -29,8 +29,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 //current setup needs to load everything as a module
 import {DeviceApi, CAPI_DeviceApi_Update, 
-    CAPI_DeviceApi_RequestUpdate, CAPI_DeviceApi_Devices_Length, 
-    CAPI_DeviceApi_Devices_Get,
+    CAPI_DeviceApi_RequestUpdate, CAPI_Media_GetVideoDevices_Length, 
+    CAPI_Media_GetVideoDevices,
     MediaConfig,
     Media} from "../awrtc/index"
 
@@ -134,11 +134,11 @@ describe("DeviceApiTest", () => {
         let update2complete = false;
 
         let deviceCount = 0;
-        const devices_length_unitialized = CAPI_DeviceApi_Devices_Length();
+        const devices_length_unitialized = CAPI_Media_GetVideoDevices_Length();
         expect(devices_length_unitialized).toBe(0);
         DeviceApi.AddOnChangedHandler(()=>{
 
-            let dev_length = CAPI_DeviceApi_Devices_Length();
+            let dev_length = CAPI_Media_GetVideoDevices_Length();
             expect(dev_length).not.toBe(0);
             expect(dev_length).toBe(Object.keys(DeviceApi.Devices).length);
             
@@ -147,7 +147,7 @@ describe("DeviceApiTest", () => {
             for(let k of keys)
             {
                 let expectedVal = DeviceApi.Devices[k].label;
-                let actual = CAPI_DeviceApi_Devices_Get(counter);
+                let actual = CAPI_Media_GetVideoDevices(counter);
 
                 expect(actual).toBe(expectedVal);
                 counter++;
@@ -237,7 +237,7 @@ describe("DeviceApiTest", () => {
         expect(DeviceApi.GetVideoDevices().length).toBe(0);
         await DeviceApi.UpdateAsync();
         expect(DeviceApi.GetVideoDevices().length).toBeGreaterThan(0);
-        expect(DeviceApi.GetVideoDevices().length).toBe(CAPI_DeviceApi_Devices_Length());
+        expect(DeviceApi.GetVideoDevices().length).toBe(CAPI_Media_GetVideoDevices_Length());
         
         done();
     });

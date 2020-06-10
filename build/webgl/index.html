@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>WebGL Demo</title>
+    <link rel="stylesheet" href="../webgl.css" type="text/css">
+  </head>
+
+  <body>
+    <canvas id="glcanvas" width="640" height="480"></canvas>
+  </body>
+
+<script src="../bundle/awrtc.js"></script>
+  <script src="gl-matrix.js"></script>
+  <script src="webgl-demo_changed.js"></script>
+  
+  <script>
+    let canvas = document.querySelector("#glcanvas");
+	
+	    let nconfig = new awrtc.NetworkConfig();
+        let call = new awrtc.BrowserWebRtcCall(nconfig);
+        call.addEventListener((sender, args) => {
+          
+          if(args.Type === awrtc.CallEventType.FrameUpdate)
+          {
+            let gl = canvas.getContext("webgl");
+            if(args.Frame.Width != globalTextureWidth || args.Frame.Height != globalTextureHeight)
+            {
+              const pixel = new Uint8Array(args.Frame.Width * args.Frame.Height * 3 ); 
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, args.Frame.Width, args.Frame.Height, 0, gl.RGB, gl.UNSIGNED_BYTE,  pixel);
+              globalTextureWidth = args.Frame.Width ;
+              globalTextureHeight = args.Frame.Height ;
+            }
+            args.Frame.ToTexture(gl, globalTextureId);
+          }
+        });
+        //As the system is designed for realtime graphics we have to call the Update method. Events are only
+        //triggered during this Update call!
+        let intervalId = setInterval(() => {
+            call.Update();
+        }, 50);
+		
+	    let config = new awrtc.MediaConfig();
+        config.Audio = false;
+        config.Video = true;
+		config.FrameUpdates = true;
+        config.IdealWidth = 640;
+        config.IdealHeight = 480;
+        config.IdealFps = 30;
+        console.log("requested config:" + JSON.stringify(config));
+		call.Configure(config);
+  </script>
+</html>

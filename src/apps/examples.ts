@@ -256,7 +256,6 @@ class MinimalCall
 //other. 
 export function BrowserWebRtcCall_minimal() {
 
-    awrtc.BrowserMediaStream.sUseLazyFrames = true;
     let netConfig = new awrtc.NetworkConfig();
     netConfig.IsConference = false;
     netConfig.SignalingUrl = DefaultValues.Signaling;

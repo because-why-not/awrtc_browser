@@ -99,7 +99,6 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
             {
                 let promise : Promise<MediaStream> = null;
                 promise = Media.SharedInstance.getUserMedia(config);
-                 
                 
                 promise.then((stream) => { //user gave permission
     

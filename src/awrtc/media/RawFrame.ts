@@ -59,6 +59,15 @@ export class IFrameData {
     }
 
     public constructor() { }
+
+    public ToTexture(gl: WebGL2RenderingContext, texture: WebGLTexture) : boolean{
+        return false;
+    }
+    /*
+    public ToTexture2(gl: WebGL2RenderingContext) : WebGLTexture{
+        return null;
+    }
+    */
 }
 
 //Container for the raw bytes of the current frame + height and width.
@@ -96,6 +105,10 @@ export class RawFrame extends IFrameData{
  * only create a lazy frame which will delay the creation of the RawFrame until the user actually tries
  * to access any data.
  * Thus if the game slows down or the user doesn't access any data the expensive copy is avoided.
+ * 
+ * This comes with the downside of risking a change in Width / Height at the moment. In theory the video could
+ * change the resolution causing the values of Width / Height to change over time before Buffer is accessed to create
+ * a copy that will be save to use. This should be ok as long as the frame is used at the time it is received.
  */
 export class LazyFrame extends IFrameData{
 
@@ -113,20 +126,42 @@ export class LazyFrame extends IFrameData{
         return this.mRawFrame.Buffer;
     }
 
-
+    /**Returns the expected width of the frame.
+     * Watch out this might change inbetween frames!
+     * 
+     */
     public get Width(): number {
+        if (this.mRawFrame == null)
+        {
+            return this.mFrameGenerator.VideoElement.videoWidth;
+        }else{
+            return this.mRawFrame.Width;
+        }
+        /*
         this.GenerateFrame();
         if (this.mRawFrame == null)
             return -1;
         return this.mRawFrame.Width;
+        */
     }
 
-
+    /**Returns the expected height of the frame.
+     * Watch out this might change inbetween frames!
+     * 
+     */
     public get Height(): number {
+        if (this.mRawFrame == null)
+        {
+            return this.mFrameGenerator.VideoElement.videoHeight;
+        }else{
+            return this.mRawFrame.Height;
+        }
+        /*
         this.GenerateFrame();
         if (this.mRawFrame == null)
             return -1;
         return this.mRawFrame.Height;
+        */
     }
 
 
@@ -134,6 +169,37 @@ export class LazyFrame extends IFrameData{
         super();
         this.mFrameGenerator = frameGenerator;
     }
+
+    /**Intendet for use via the Unity plugin.
+     * Will copy the image directly into a texture to avoid overhead of a CPU side copy.
+     * 
+     * The given texture should have the correct size before calling this method.
+     * 
+     * @param gl 
+     * @param texture 
+     */
+    public ToTexture(gl: WebGL2RenderingContext, texture: WebGLTexture) : boolean{
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        /*
+        const level = 0;
+        const internalFormat = gl.RGBA;
+        const srcFormat = gl.RGBA;
+        const srcType = gl.UNSIGNED_BYTE;
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, this.mFrameGenerator.VideoElement);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        */
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGB, gl.UNSIGNED_BYTE, this.mFrameGenerator.VideoElement);
+        return true;
+    }
+    /*
+    public ToTexture2(gl: WebGL2RenderingContext) : WebGLTexture{
+        let tex = gl.createTexture()
+        this.ToTexture(gl, tex)
+        return;
+    }
+    */
 
     //Called before access of any frame data triggering the creation of the raw frame data
     private GenerateFrame() {
