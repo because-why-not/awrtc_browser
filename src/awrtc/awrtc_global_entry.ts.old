@@ -27,20 +27,18 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+//obsolete. not needed for unity build anymore
+//special entry point only needed for backwards compatibility
+//it will merge awrtc namespace into window so old code still works
+//that accesses objects directly instead using the global awrtc object
+//the index will include all external modules
+import * as awrtc from "./index"
 
-console.debug("loading awrtc modules ...");
-//this should trigger webpack to include
-//the webrtc adapter.js. It changes the 
-//global WebRTC calls and adds backwards
-//and browser compatibility.
-declare function require(moduleName: string)
-let adapter  = require("webrtc-adapter");
+//we merge awrtc into the global namespace
+Object.assign(window, awrtc);
 
-export * from "./network/index"
-export * from "./media/index"
-//for simplicity browser and unity are merged here
-//it could as well be built and deployed separately
-export * from "./media_browser/index"
-export * from "./unity/index"
-console.debug("loading awrtc modules completed!");
+//for less risky global access 
+(window as any).awrtc = awrtc;
+
+
 

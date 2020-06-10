@@ -28,6 +28,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { SLog } from "../network/index";
+import { MediaConfig } from "media/MediaConfig";
+import { VideoInput } from "./VideoInput";
 
 export class DeviceInfo
 {
@@ -79,7 +81,11 @@ export class DeviceApi
     {
         let index = DeviceApi.sUpdateEvents.indexOf(evt);
         if(index >= 0)
+        {
             DeviceApi.sUpdateEvents.splice(index, 1);
+        }else{
+            SLog.LW("Tried to remove an unknown event handler in DeviceApi.RemOnChangedHandler");
+        }
     }
 
     private static TriggerChangedEvent()
@@ -166,6 +172,15 @@ export class DeviceApi
     {
         return DeviceApi.sDeviceInfo;
     }
+
+
+    public static GetVideoDevices(): string[]{
+        const devices = DeviceApi.Devices;
+        const keys = Object.keys(devices);
+        const labels = keys.map((x)=>{return devices[x].label});
+        
+        return labels;
+    }
     public static Reset()
     {
         DeviceApi.sUpdateEvents = [];
@@ -196,7 +211,7 @@ export class DeviceApi
         DeviceApi.Update();
     }
 
-
+    static ENUM_FAILED = "Can't access mediaDevices or enumerateDevices";
     /**Updates the device list based on the current
      * access. Gives the devices numbers if the name isn't known.
      */
@@ -210,9 +225,28 @@ export class DeviceApi
             .then(DeviceApi.InternalOnEnum)
             .catch(DeviceApi.InternalOnErrorCatch);
         }else{
-            DeviceApi.InternalOnErrorString("Can't access mediaDevices or enumerateDevices");
+            DeviceApi.InternalOnErrorString(DeviceApi.ENUM_FAILED);
         }
     }
+    public static async UpdateAsync():Promise<void>
+    {
+        return new Promise((resolve, fail)=>{
+
+            DeviceApi.sLastError = null;
+            if(DeviceApi.IsApiAvailable() == false)
+            {
+                DeviceApi.InternalOnErrorString(DeviceApi.ENUM_FAILED);
+                fail(DeviceApi.ENUM_FAILED);
+            }
+            resolve();
+        }).then(()=>{
+            DeviceApi.sIsPending = true;
+            return navigator.mediaDevices.enumerateDevices()
+            .then(DeviceApi.InternalOnEnum)
+            .catch(DeviceApi.InternalOnErrorCatch);
+        });
+    }
+    
     /**Checks if the API is available in the browser.
      * false - browser doesn't support this API
      * true - browser supports the API (might still refuse to give
@@ -255,4 +289,127 @@ export class DeviceApi
         }
         return null;
     }
+
+    public static IsUserMediaAvailable()
+    {
+        if(navigator && navigator.mediaDevices)
+            return true;
+        return false;
+    }
+    
+
+    public static ToConstraints(config: MediaConfig): MediaStreamConstraints
+    {
+        //ugly part starts -> call get user media data (no typescript support)
+        //different browsers have different calls...
+
+        //check  getSupportedConstraints()??? 
+        //see https://w3c.github.io/mediacapture-main/getusermedia.html#constrainable-interface
+
+        //set default ideal to very common low 320x240 to avoid overloading weak computers
+        var constraints = {
+            audio: config.Audio
+        } as any;
+
+
+        
+        let width = {} as any;
+        let height = {} as any;
+        let video = {} as any;
+        let fps = {} as any;
+        
+        if (config.MinWidth != -1)
+            width.min = config.MinWidth;
+
+        if (config.MaxWidth != -1)
+            width.max = config.MaxWidth;
+        
+        if (config.IdealWidth != -1)
+            width.ideal = config.IdealWidth;
+        
+        if (config.MinHeight != -1)
+            height.min = config.MinHeight;
+
+        if (config.MaxHeight != -1)
+            height.max = config.MaxHeight;
+
+        if (config.IdealHeight != -1)
+            height.ideal = config.IdealHeight;
+        
+        
+        if (config.MinFps != -1)
+            fps.min = config.MinFps;
+        if (config.MaxFps != -1)
+            fps.max = config.MaxFps;
+        if (config.IdealFps != -1)
+            fps.ideal = config.IdealFps;
+            
+
+        //user requested specific device? get it now to properly add it to the
+        //constraints later
+        let deviceId:string = null;
+        if(config.Video && config.VideoDeviceName && config.VideoDeviceName !== "")
+        {
+            deviceId = DeviceApi.GetDeviceId(config.VideoDeviceName);
+            SLog.L("using device " + config.VideoDeviceName);
+            if(deviceId === "")
+            {
+                //Workaround for Chrome 81: If no camera access is allowed chrome returns the deviceId ""
+                //thus we can only request any video device. We can't select a specific one
+                deviceId = null;
+            }else if(deviceId !== null)
+            {
+                //all good
+            }
+            else{
+                SLog.LE("Failed to find deviceId for label " + config.VideoDeviceName);
+                throw new Error("Unknown device " + config.VideoDeviceName);
+            }
+        }
+        //watch out: unity changed behaviour and will now
+        //give 0 / 1 instead of false/true
+        //using === won't work
+        if(config.Video == false)
+        {
+            //video is off
+            video = false;
+        }else {
+            if(Object.keys(width).length > 0){
+                video.width = width;
+            }
+            if(Object.keys(height).length > 0){
+                video.height = height;
+            }
+            if(Object.keys(fps).length > 0){
+                video.frameRate = fps;
+            }
+            if(deviceId !== null){
+                video.deviceId = {"exact":deviceId};
+            }
+            
+            //if we didn't add anything we need to set it to true
+            //at least (I assume?)
+            if(Object.keys(video).length == 0){
+                video = true;
+            }
+        }
+
+
+        constraints.video = video;
+        return constraints;
+    }
+
+    public static getBrowserUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream>{
+
+        return navigator.mediaDevices.getUserMedia(constraints);
+    }
+    public static getAssetUserMedia(config: MediaConfig): Promise<MediaStream>{
+        return new Promise((resolve)=>{
+            const res = DeviceApi.ToConstraints(config);
+            resolve(res);
+        }).then((constraints)=>{
+            return DeviceApi.getBrowserUserMedia(constraints as MediaStreamConstraints);
+        });        
+    }
+
 }

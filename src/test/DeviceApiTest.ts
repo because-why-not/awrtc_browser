@@ -29,8 +29,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 //current setup needs to load everything as a module
 import {DeviceApi, CAPI_DeviceApi_Update, 
-    CAPI_DeviceApi_RequestUpdate, CAPI_DeviceApi_Devices_Length, 
-    CAPI_DeviceApi_Devices_Get} from "../awrtc/index"
+    CAPI_DeviceApi_RequestUpdate, CAPI_Media_GetVideoDevices_Length, 
+    CAPI_Media_GetVideoDevices,
+    MediaConfig,
+    Media} from "../awrtc/index"
 
 export function DeviceApiTest_export()
 {
@@ -132,11 +134,11 @@ describe("DeviceApiTest", () => {
         let update2complete = false;
 
         let deviceCount = 0;
-        const devices_length_unitialized = CAPI_DeviceApi_Devices_Length();
+        const devices_length_unitialized = CAPI_Media_GetVideoDevices_Length();
         expect(devices_length_unitialized).toBe(0);
         DeviceApi.AddOnChangedHandler(()=>{
 
-            let dev_length = CAPI_DeviceApi_Devices_Length();
+            let dev_length = CAPI_Media_GetVideoDevices_Length();
             expect(dev_length).not.toBe(0);
             expect(dev_length).toBe(Object.keys(DeviceApi.Devices).length);
             
@@ -145,7 +147,7 @@ describe("DeviceApiTest", () => {
             for(let k of keys)
             {
                 let expectedVal = DeviceApi.Devices[k].label;
-                let actual = CAPI_DeviceApi_Devices_Get(counter);
+                let actual = CAPI_Media_GetVideoDevices(counter);
 
                 expect(actual).toBe(expectedVal);
                 counter++;
@@ -153,8 +155,114 @@ describe("DeviceApiTest", () => {
             done();
         });
         CAPI_DeviceApi_Update();
+    });
+
+
+
+    
+    it("isMediaAvailable", () => {
+
+        const res = DeviceApi.IsUserMediaAvailable();
+        expect(res).toBe(true);
+    });
+    it("getUserMedia", async () => {
+
+        let stream = await DeviceApi.getBrowserUserMedia({audio:true});
+        expect(stream).not.toBeNull();
+        expect(stream.getVideoTracks().length).toBe(0);
+        expect(stream.getAudioTracks().length).toBe(1);
+        stream = await DeviceApi.getBrowserUserMedia({video:true});
+        expect(stream).not.toBeNull();
+        expect(stream.getAudioTracks().length).toBe(0);
+        expect(stream.getVideoTracks().length).toBe(1);
+    });
+    it("getAssetMedia", async () => {
+
+        let config = new MediaConfig();
+        config.Audio = true;
+        config.Video = false;
+        let stream = await DeviceApi.getAssetUserMedia(config);
+        expect(stream).not.toBeNull();
+        expect(stream.getVideoTracks().length).toBe(0);
+        expect(stream.getAudioTracks().length).toBe(1);
+        config = new MediaConfig();
+        config.Audio = false;
+        config.Video = true;
+        stream = await DeviceApi.getAssetUserMedia(config);
+        expect(stream).not.toBeNull();
+        expect(stream.getAudioTracks().length).toBe(0);
+        expect(stream.getVideoTracks().length).toBe(1);
+    });
+
+    it("getAssetMedia_invalid", async () => {
+
+        let config = new MediaConfig();
+        config.Audio = false;
+        config.Video = true;
+        config.VideoDeviceName = "invalid name"
+        let error = null;
+        let stream :MediaStream = null;
+        console.log("Expecting error message: Failed to find deviceId for label invalid name");
+        try
+        {
+            stream = await DeviceApi.getAssetUserMedia(config);
+        }catch(err){
+            error = err;
+        }
+        expect(stream).toBeNull();
+        expect(error).toBeTruthy();
+    });
+
+    //check for a specific bug causing promise catch not to trigger correctly
+    //due to error in ToConstraints
+    it("getAssetMedia_invalid_promise", (done) => {
+
+        let config = new MediaConfig();
+        config.Audio = false;
+        config.Video = true;
+        config.VideoDeviceName = "invalid name"
         
+        let result: Promise<MediaStream> = null;
+        result = DeviceApi.getAssetUserMedia(config);
+        result.then(()=>{
+            fail("getAssetUserMedia returned but was expected to fail");
+        }).catch((error)=>{
+            expect(error).toBeTruthy();
+            done();
+        })
+    });
+
+    it("UpdateAsync", async (done) => {
+        
+        expect(DeviceApi.GetVideoDevices().length).toBe(0);
+        await DeviceApi.UpdateAsync();
+        expect(DeviceApi.GetVideoDevices().length).toBeGreaterThan(0);
+        expect(DeviceApi.GetVideoDevices().length).toBe(CAPI_Media_GetVideoDevices_Length());
+        
+        done();
     });
     
+    /*
+    it("Devices", async () => {
+
+        DeviceApi.RequestUpdate
+
+        let config = new MediaConfig();
+        config.Audio = false;
+        config.Video = true;
+        config.VideoDeviceName = "invalid name"
+        let error = null;
+        let stream :MediaStream = null;
+        console.log("Expecting error message: Failed to find deviceId for label invalid name");
+        try
+        {
+            stream = await DeviceApi.getAssetUserMedia(config);
+        }catch(err){
+            error = err;
+        }
+        expect(stream).toBeNull();
+        expect(error).toBeTruthy();
+    });
+*/
 });
 

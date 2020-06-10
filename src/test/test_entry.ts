@@ -34,3 +34,6 @@ export * from "./CallTest"
 export * from "./MediaNetworkTest"
 export * from "./BrowserApiTest"
 export * from "./DeviceApiTest"
+export * from "./VideoInputTest"
+export * from "./MediaTest"
+

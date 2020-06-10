@@ -31,6 +31,32 @@ import { IFrameData, RawFrame, LazyFrame } from "../media/RawFrame";
 import { SLog } from "../network/Helper";
 
 
+/**
+ * Mostly used for debugging at the moment. Browser API doesn't seem to have a standard way to
+ * determine if a frame was updated. This class currently uses several different methods based
+ * on availability 
+ * 
+ */
+enum FrameEventMethod{
+    /**We use a set default framerate. FPS is unknown and we can't recognize if a frame was updated. 
+     * Used for remote video tracks on firefox as the "framerate" property will not be set.
+     */
+    DEFAULT_FALLBACK = "DEFAULT_FALLBACK",
+    /**
+     * Using the tracks meta data to decide the framerate. We might drop frames or deliver them twice
+     * because we can't tell when exactly they are updated.
+     * Some video devices also claim 30 FPS but generate less causing us to waste performance copying the same image
+     * multipel times
+     * 
+     * This system works with local video in firefox
+     */
+    TRACK = "TRACK",
+    /**
+     *  uses frame numbers returned by the browser. This works for webkit based browsers only so far.
+     *  Firefox is either missing the needed properties or they return always 0
+     */
+    EXACT = "EXACT"
+}
 
 /**Internal use only. 
  * Bundles all functionality related to MediaStream, Tracks and video processing.
@@ -46,15 +72,14 @@ export class BrowserMediaStream {
     //for debugging. Will attach the HTMLVideoElement used to play the local and remote
     //video streams to the document.
     public static DEBUG_SHOW_ELEMENTS = false;
-
-    //TODO: remove this flag. it is now always using lazy frames
-    public static sUseLazyFrames = true;
+    
     
 
     //Gives each FrameBuffer and its HTMLVideoElement a fixed id for debugging purposes.
     public static sNextInstanceId = 1;
 
     
+    public static VERBOSE = false;
 
 
     private mStream: MediaStream;
@@ -74,12 +99,15 @@ export class BrowserMediaStream {
 
     //Framerate used as a workaround if
     //the actual framerate is unknown due to browser restrictions
-    public static DEFAULT_FRAMERATE = 25;
+    public static DEFAULT_FRAMERATE = 30;
     private mMsPerFrame = 1.0 / BrowserMediaStream.DEFAULT_FRAMERATE * 1000;
-    private mFrameRateKnown = false;
+
+    private mFrameEventMethod = FrameEventMethod.DEFAULT_FALLBACK;
+    
 
     //Time the last frame was generated
     private mLastFrameTime = 0;
+    private mNextFrameTime = 0;
 
     /** Number of the last frame (not yet supported in all browsers)
      * if it remains at <= 0 then we just generate frames based on
@@ -98,37 +126,56 @@ export class BrowserMediaStream {
         this.mInstanceId = BrowserMediaStream.sNextInstanceId;
         BrowserMediaStream.sNextInstanceId++;
 
-        if (this.mStream.getVideoTracks().length > 0)
-        {
-            this.mHasVideo = true;
-            let vtrack = this.mStream.getVideoTracks()[0];
-            let settings = vtrack.getSettings();
-            let fps = settings.frameRate;
-            if(fps)
-            {
-                this.mMsPerFrame = 1.0 / fps * 1000;
-                this.mFrameRateKnown = true;
-            }
-        }
+        this.mMsPerFrame = 1.0 / BrowserMediaStream.DEFAULT_FRAMERATE * 1000;
+        this.mFrameEventMethod = FrameEventMethod.DEFAULT_FALLBACK;
+        
 
         this.SetupElements();
     }
     private CheckFrameRate():void
     {
-        //in chrome the track itself might miss the framerate but
-        //we still know when it updates trough webkitDecodedFrameCount
-        if(this.mVideoElement && typeof (this.mVideoElement as any).webkitDecodedFrameCount !== "undefined")
+        if(this.mVideoElement)
         {
-            this.mFrameRateKnown = true;
-        }
-        if(this.mFrameRateKnown === false)
-        {
-            //firefox and co won't tell us the FPS for remote stream
-            SLog.LW("Framerate unknown. Using default framerate of " + BrowserMediaStream.DEFAULT_FRAMERATE);
-            
+            if (this.mStream.getVideoTracks().length > 0)
+            {
+                this.mHasVideo = true;
+                let vtrack = this.mStream.getVideoTracks()[0];
+                let settings = vtrack.getSettings();
+                let fps = settings.frameRate;
+                if(fps)
+                {
+                    if(BrowserMediaStream.VERBOSE)
+                    {
+                        console.log("Track FPS: " + fps);
+                    }
+                    this.mMsPerFrame = 1.0 / fps * 1000;
+                    this.mFrameEventMethod = FrameEventMethod.TRACK;
+                }
+            }
+
+            //try to get the video fps via the track
+            //fails on firefox if the track comes from a remote source
+            if(this.GetFrameNumber() != -1)
+            {
+                if(BrowserMediaStream.VERBOSE)
+                {
+                    console.log("Get frame available.");
+                }
+                //browser returns exact frame information
+                this.mFrameEventMethod = FrameEventMethod.EXACT;
+            }
+
+            //failed to determine any frame rate. This happens on firefox with
+            //remote tracks
+            if(this.mFrameEventMethod === FrameEventMethod.DEFAULT_FALLBACK)
+            {
+                //firefox and co won't tell us the FPS for remote stream
+                SLog.LW("Framerate unknown for stream " + this.mInstanceId + ". Using default framerate of " + BrowserMediaStream.DEFAULT_FRAMERATE);
+            }
         }
     }
-    public SetupElements() {
+
+    private SetupElements() {
 
         this.mVideoElement = this.SetupVideoElement();
         //TOOD: investigate bug here
@@ -138,7 +185,7 @@ export class BrowserMediaStream {
         //with 720p. (video device "BisonCam, NB Pro" on MSI laptop)
         SLog.L("video element created. video tracks: " + this.mStream.getVideoTracks().length);
         this.mVideoElement.onloadedmetadata = (e) => {
-
+            //console.log("onloadedmetadata");
             //we might have shutdown everything by now already
             if(this.mVideoElement == null)
                 return;
@@ -162,7 +209,12 @@ export class BrowserMediaStream {
 
             this.CheckFrameRate();
             
-			SLog.L("Resolution: " + this.mVideoElement.videoWidth + "x" + this.mVideoElement.videoHeight);
+            let video_log = "Resolution: " + this.mVideoElement.videoWidth + "x" + this.mVideoElement.videoHeight 
+                + " fps method: " + this.mFrameEventMethod + " " + Math.round(1000/(this.mMsPerFrame));
+            SLog.L(video_log);
+            if(BrowserMediaStream.VERBOSE){
+                console.log(video_log)
+            }
             //now create canvas after the meta data of the video are known
             if (this.mHasVideo) {
                 this.mCanvasElement = this.SetupCanvas();
@@ -199,26 +251,42 @@ export class BrowserMediaStream {
         let frameNumber;
         if(this.mVideoElement)
         {
-            //to find out if we got a new frame
-            //chrome has webkitDecodedFrameCount
-            //firefox mozDecodedFrames, mozParsedFrames,  mozPresentedFrames seems to be always 0 so far
-            //mozPaintedFrames turned out useless as it only updates if the tag is visible
-            //no idea about all others
-            //
-            frameNumber = (this.mVideoElement as any).webkitDecodedFrameCount
-                //|| this.mVideoElement.currentTime can't be used updates every call
-                || -1;
+            if((this.mVideoElement as any).webkitDecodedFrameCount)
+            {
+                frameNumber = (this.mVideoElement as any).webkitDecodedFrameCount;
+            }
+            /*
+            None of these work and future versions might return numbers that are only
+            updated once a second or so. For now it is best to ignore these.
+
+            TODO: Check if any of these will work in the future. this.mVideoElement.getVideoPlaybackQuality().totalVideoFrames; 
+            might also help in the future (so far always 0)
+            this.mVideoElement.currentTime also won't work because this is updated faster than the framerate (would result in >100+ framerate)
+            else if((this.mVideoElement as any).mozParsedFrames)
+            {
+                frameNumber = (this.mVideoElement as any).mozParsedFrames;
+            }else if((this.mVideoElement as any).mozDecodedFrames)
+            {
+                frameNumber = (this.mVideoElement as any).mozDecodedFrames;
+            }else if((this.mVideoElement as any).decodedFrameCount)
+            {
+                frameNumber = (this.mVideoElement as any).decodedFrameCount;
+            }
+            */
+            else
+            {
+                frameNumber =  -1;
+            }
         }else{
             frameNumber = -1;
         }
         return frameNumber;
     }
 
-    //TODO: Buffering
     public TryGetFrame(): IFrameData
     {
         //make sure we get the newest frame
-        this.EnsureLatestFrame();
+        //this.EnsureLatestFrame();
 
         //remove the buffered frame if any
         var result = this.mBufferedFrame;
@@ -230,7 +298,7 @@ export class BrowserMediaStream {
         this.mVideoElement.muted = mute;
     }
     public PeekFrame(): IFrameData {
-        this.EnsureLatestFrame();
+        //this.EnsureLatestFrame();
         return this.mBufferedFrame;
     }
 
@@ -240,7 +308,7 @@ export class BrowserMediaStream {
     private EnsureLatestFrame():boolean
     {
         if (this.HasNewerFrame()) {
-            this.FrameToBuffer();
+            this.GenerateFrame();
             return true;
         }
         return false;
@@ -258,6 +326,7 @@ export class BrowserMediaStream {
             {
                 if(this.mLastFrameNumber > 0)
                 {
+                    this.mFrameEventMethod = FrameEventMethod.EXACT;
                     //we are getting frame numbers. use those to 
                     //check if we have a new one
                     if(this.GetFrameNumber() > this.mLastFrameNumber)
@@ -268,10 +337,8 @@ export class BrowserMediaStream {
                 else
                 {
                     //many browsers do not share the frame info
-                    //so far we just generate 30 FPS as a work around
                     let now = new Date().getTime();
-                    let div = now - this.mLastFrameTime;
-                    if (div >= this.mMsPerFrame) {
+                    if (this.mNextFrameTime <= now) {
                     {
                         return true;
                     }
@@ -284,8 +351,7 @@ export class BrowserMediaStream {
 
     
     public Update(): void {
-        //moved to avoid creating buffered frames if not needed
-        //this.EnsureLatestFrame();
+        this.EnsureLatestFrame();
     }
 
     public DestroyCanvas(): void {
@@ -319,11 +385,12 @@ export class BrowserMediaStream {
         this.mCanvasElement.width = this.mVideoElement.videoWidth;
         this.mCanvasElement.height = this.mVideoElement.videoHeight;
         let ctx = this.mCanvasElement.getContext("2d");
-
+        /*
         var fillBackgroundFirst = true;
         if (fillBackgroundFirst) {
             ctx.clearRect(0, 0, this.mCanvasElement.width, this.mCanvasElement.height);
         }
+        */
         ctx.drawImage(this.mVideoElement, 0, 0);
  
         try {
@@ -359,10 +426,21 @@ export class BrowserMediaStream {
         }
     }
 
-    private FrameToBuffer(): void
+    //Old buffed frame was replaced with a wrapepr that avoids buffering internally
+    //Only point of generate frame is now to ensure a consistent framerate
+    private GenerateFrame(): void
     {
-        this.mLastFrameTime = new Date().getTime();
         this.mLastFrameNumber = this.GetFrameNumber();
+        
+        let now = new Date().getTime();
+        //js timing is very inaccurate. reduce time until next frame if we are
+        //late with this one.
+        let diff = now - this.mNextFrameTime;
+        let delta = (this.mMsPerFrame - diff);
+        delta = Math.min(this.mMsPerFrame, Math.max(1, delta))
+        this.mLastFrameTime = now;
+        this.mNextFrameTime = now + delta;
+        //console.log("last frame , new frame", this.mLastFrameTime, this.mNextFrameTime, delta);
         this.mBufferedFrame = new LazyFrame(this);
     }
 

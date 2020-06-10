@@ -21,6 +21,8 @@
     "LocalNetworkTest.ts",
     "MediaNetworkTest.ts",
     "DeviceApiTest.ts",
-    "BrowserApiTest.ts"
+    "VideoInputTest.ts",
+    "BrowserApiTest.ts",
+    "MediaTest.ts"
   ]
 }

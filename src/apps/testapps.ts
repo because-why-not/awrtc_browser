@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import * as awrtc from "../awrtc/index"
 import {DefaultValues, GetRandomKey} from "./apphelpers"
-import { DeviceApi, DeviceInfo } from "../awrtc/index";
+import { DeviceApi, DeviceInfo, BrowserMediaStream } from "../awrtc/index";
 
 //This file only contains badly maintained
 //test apps. Use only experimentation. 
@@ -387,26 +387,34 @@ class FpsCounter
     lastRefresh = 0;
     fps = 0;
     counter = 0;
+    isNew = false;
 
     public get Fps()
     {
         return Math.round(this.fps);
     }
 
-    public get Counter()
+    public get IsNew() : boolean
     {
-        return this.counter;
+        if(this.isNew){
+            this.isNew  = false;
+            return true;
+        }
+        return false;
     }
 
     Update():void
     {
         this.counter++;
         let diff = new Date().getTime() - this.lastRefresh;
-        if(diff > 1000)
+
+        let refresh_time = 2000;
+        if(diff > refresh_time)
         {
             this.fps = this.counter / (diff / 1000);
             this.counter = 0;
             this.lastRefresh = new Date().getTime();
+            this.isNew = true;
         }
     }
 }
@@ -415,7 +423,7 @@ class FpsCounter
 //and accesses the resulting frame data directly
 export function BrowserMediaNetwork_frameaccess() {
 
-
+    //BrowserMediaStream.DEFAULT_FRAMERATE = 60;
     //awrtc.BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
 
     let address = GetRandomKey();
@@ -427,8 +435,15 @@ export function BrowserMediaNetwork_frameaccess() {
     let network2 = new awrtc.BrowserMediaNetwork(networkConfig);
 
     let mediaConfig1 = new awrtc.MediaConfig();
-    mediaConfig1.Audio = true;
+    mediaConfig1.Audio = false;
     mediaConfig1.Video = true;
+    /*
+    mediaConfig1.IdealWidth = 320;
+    mediaConfig1.IdealHeight = 240;
+    //fps seems to be ignored by browsers even if
+    //the camera specifically supports that setting
+    mediaConfig1.IdealFps = 15;
+    */
     let mediaConfig2 = new awrtc.MediaConfig();
     mediaConfig2.Audio = false;
     mediaConfig2.Video = false;
@@ -436,6 +451,7 @@ export function BrowserMediaNetwork_frameaccess() {
 
     let localFps = new FpsCounter();
     let remoteFps = new FpsCounter();
+    let loopRate = new FpsCounter();
 
 
 
@@ -466,15 +482,17 @@ export function BrowserMediaNetwork_frameaccess() {
 
     setInterval(() => {
         network1.Update();
+        loopRate.Update();
+        if(loopRate.IsNew)
+            console.log("Loop rate: " + loopRate.Fps);
 
         let frame1: awrtc.IFrameData = null;
         let frame2: awrtc.IFrameData = null;
-
         frame1 = network1.TryGetFrame(awrtc.ConnectionId.INVALID);
         if (frame1 != null)
         {
             localFps.Update();
-            if(localFps.Counter % 30 == 0)
+            if(localFps.IsNew)
                 console.log("local1  width" + frame1.Width + " height:" + frame1.Height + "fps: " + localFps.Fps + " data:" + frame1.Buffer[0]);
             
         }
@@ -515,7 +533,7 @@ export function BrowserMediaNetwork_frameaccess() {
             if (frame2 != null)
             {
                 remoteFps.Update();
-                if(remoteFps.Counter % 30 == 0)
+                if(remoteFps.IsNew)
                     console.log("remote2 width" + frame2.Width + " height:" + frame2.Height + "fps: " + remoteFps.Fps + " data:" + frame2.Buffer[0]);
             }
         }
