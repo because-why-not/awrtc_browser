@@ -121,6 +121,8 @@ export abstract class AWebRtcPeer {
 
     protected mOfferOptions: RTCOfferOptions = { "offerToReceiveAudio": false, "offerToReceiveVideo": false };
     
+    private mReadyForIce = false;
+    private mBufferedIceCandidates : RTCIceCandidate[] = [];
 
 
     constructor(rtcConfig: RTCConfiguration) {
@@ -140,9 +142,9 @@ export abstract class AWebRtcPeer {
         this.mPeer = new RTCPeerConnection(rtcConfig);
         this.mPeer.onicecandidate = this.OnIceCandidate;
         this.mPeer.oniceconnectionstatechange =  this.OnIceConnectionStateChange; 
-        this.mPeer.onconnectionstatechange = this.OnConnectionStateChange;
         this.mPeer.onicegatheringstatechange = this.OnIceGatheringStateChange;
         this.mPeer.onnegotiationneeded = this.OnRenegotiationNeeded;
+        this.mPeer.onconnectionstatechange = this.OnConnectionStateChange;
         this.mPeer.onsignalingstatechange = this.OnSignalingChange;
 
     }
@@ -210,6 +212,44 @@ export abstract class AWebRtcPeer {
         }
     }
 
+    private BufferIceCandidate(ice: RTCIceCandidate){
+        this.mBufferedIceCandidates.push(ice);
+    }
+
+    /**Called after setRemoteDescription succeeded. 
+     * After this call we accept ice candidates and add all buffered ice candidates we received 
+     * until then. 
+     * 
+     * This is a workaround for problems between Safari & Firefox. Safari sometimes sends ice candidates before
+     * it sends an answer causing an error in firefox.
+     */
+    private StartIce(){
+
+        Debug.Log("accepting ice candidates");
+        this.mReadyForIce = true;
+        if(this.mBufferedIceCandidates.length > 0)
+        {
+            Debug.Log("adding locally buffered ice candidates");
+            //signaling active. Forward ice candidates we received so far
+            const candidates = this.mBufferedIceCandidates;
+            this.mBufferedIceCandidates = [];
+            for (var candidate of candidates) {
+                this.AddIceCandidate(candidate);
+            }
+        }
+    }
+    private AddIceCandidate(ice: RTCIceCandidate){
+
+        //based on the shim internals there is a risk it triggers errors outside of the promise
+        try{
+            let promise = this.mPeer.addIceCandidate(ice);
+            promise.then(() => {/*success*/ });
+            promise.catch((error: DOMError) => { Debug.LogError(error); });
+        }catch(error){
+            Debug.LogError(error);
+        }
+    }
+
     public HandleIncomingSignaling(): void {
 
         //handle the incoming messages all at once
@@ -260,10 +300,18 @@ export abstract class AWebRtcPeer {
                 } else {
                     let ice: RTCIceCandidate = new RTCIceCandidate(msg);
                     if (ice != null) {
-                        let promise = this.mPeer.addIceCandidate(ice);
-                        promise.then(() => {/*success*/ });
-                        promise.catch((error: DOMError) => { Debug.LogError(error); });
-                        
+
+                        if(this.mReadyForIce)
+                        {
+                            //expected normal behaviour
+                            this.AddIceCandidate(ice);
+                        }else{
+                            
+                            //Safari sometimes sends ice candidates before the answer message
+                            //causing firefox to trigger an error
+                            //buffer and reemit once setRemoteCandidate has been called
+                            this.BufferIceCandidate(ice);
+                        }
                     }
                 }
             }
@@ -345,6 +393,7 @@ export abstract class AWebRtcPeer {
         Debug.Log("CreateAnswer");
         let remoteDescPromise = this.mPeer.setRemoteDescription(offer);
         remoteDescPromise.then(() => {
+            this.StartIce();
             let createAnswerPromise = this.mPeer.createAnswer();
             createAnswerPromise.then((desc: RTCSessionDescription) => {
                 let msg: string = JSON.stringify(desc);
@@ -378,6 +427,7 @@ export abstract class AWebRtcPeer {
         let remoteDescPromise = this.mPeer.setRemoteDescription(answer);
         remoteDescPromise.then(() => {
             //all done
+            this.StartIce();
         });
         remoteDescPromise.catch((error: DOMError) => {
             Debug.LogError(error);
@@ -422,7 +472,7 @@ export abstract class AWebRtcPeer {
 
     private OnIceConnectionStateChange = (ev: Event): void =>
     {
-        Debug.Log("on ice connection state: " + this.mPeer.iceConnectionState);
+        Debug.Log("oniceconnectionstatechange: " + this.mPeer.iceConnectionState);
         //Chrome stopped emitting "failed" events. We have to react to disconnected events now
         if (this.mPeer.iceConnectionState == "failed" || this.mPeer.iceConnectionState == "disconnected")
         {
@@ -442,21 +492,24 @@ export abstract class AWebRtcPeer {
     */
     private OnConnectionStateChange = (ev:Event): void =>
     {
-        //Debug.Log("on connection state change: " + this.mPeer.iceConnectionState);
+        Debug.Log("onconnectionstatechange: " + this.mPeer.iceConnectionState);
     }
 
     private OnIceGatheringStateChange = (ev:Event): void =>
     {
-        //Debug.Log("ice gathering change: " + this.mPeer.iceGatheringState);
+        Debug.Log("onicegatheringstatechange: " + this.mPeer.iceGatheringState);
     }
 
     private OnRenegotiationNeeded = (ev:Event): void =>
-    { }
+    {
+
+    }
 
     //broken in chrome. won't switch to closed anymore
     private OnSignalingChange = (ev:Event): void =>
     {
-        Debug.Log("on signaling change:" + this.mPeer.signalingState);
+        Debug.Log("onsignalingstatechange:" + this.mPeer.signalingState);
+        //obsolete
         if (this.mPeer.signalingState == "closed") {
             this.RtcSetClosed();
         }
