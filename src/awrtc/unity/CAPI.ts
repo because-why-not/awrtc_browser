@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /**This file contains the mapping between the awrtc_browser library and
  * Unitys WebGL support. Not needed for regular use.
  */
-import {SLog, WebRtcNetwork, SignalingConfig, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork} from "../network/index"
+import { SLog, WebRtcNetwork, SignalingConfig, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork } from "../network/index"
 import { MediaConfigurationState, NetworkConfig, MediaConfig } from "../media/index";
 import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media, VideoInputType } from "../media_browser/index";
 
@@ -44,44 +44,69 @@ var CAPI_InitMode = {
     //Asks the user for camera / audio access to be able to
     //get accurate device information
     RequestAccess: 2
-  };
+};
 
 var CAPI_InitState = {
     Uninitialized: 0,
     Initializing: 1,
     Initialized: 2,
     Failed: 3
-  };
+};
 var gCAPI_InitState = CAPI_InitState.Uninitialized;
+var gCAPI_Canvas: HTMLCanvasElement = null;
 
-export function CAPI_InitAsync(initmode) 
-{
+declare var GLctx: any;
+
+export function CAPI_InitAsync(initmode) {
     console.debug("CAPI_InitAsync mode: " + initmode);
     gCAPI_InitState = CAPI_InitState.Initializing;
+
+    if (GLctx && GLctx.canvas) {
+        gCAPI_Canvas = GLctx.canvas as HTMLCanvasElement;
+    }
+    InitAutoplayWorkaround();
+
     let hasDevApi = DeviceApi.IsApiAvailable();
-    if( hasDevApi && initmode == CAPI_InitMode.WaitForDevices)
-    {
+    if (hasDevApi && initmode == CAPI_InitMode.WaitForDevices) {
         DeviceApi.Update();
-    }else if(hasDevApi && initmode == CAPI_InitMode.RequestAccess)
-    {
+    } else if (hasDevApi && initmode == CAPI_InitMode.RequestAccess) {
         DeviceApi.RequestUpdate();
-    }else{
+    } else {
         //either no device access available or not requested. Switch
         //to init state immediately without device info
         gCAPI_InitState = CAPI_InitState.Initialized;
-        if(hasDevApi == false)
-        {
+        if (hasDevApi == false) {
             console.debug("Initialized without accessible DeviceAPI");
         }
     }
 }
-export function CAPI_PollInitState() 
-{
+
+function InitAutoplayWorkaround(){
+    if(gCAPI_Canvas == null){
+        SLog.LW("Autoplay workaround inactive. No canvas object known to register click & touch event handlers.");
+        return;
+    }
+
+    let listener : ()=>void = null;
+    listener = ()=>{
+        //called during user input event
+        BrowserMediaStream.ResolveAutoplay();
+        gCAPI_Canvas.removeEventListener("click", listener, false);
+        gCAPI_Canvas.removeEventListener("touchstart", listener, false);
+    };
+    //If a stream runs into autoplay issues we add a listener for the next on click / touchstart event
+    //and resolve it on the next incoming event
+    BrowserMediaStream.onautoplayblocked = ()=>{
+        gCAPI_Canvas.addEventListener("click", listener, false);
+        gCAPI_Canvas.addEventListener("touchstart", listener, false);
+    };
+}
+
+export function CAPI_PollInitState() {
     //keep checking if the DeviceApi left pending state
     //Once completed init is finished.
     //Later we might do more here
-    if(DeviceApi.IsPending == false && gCAPI_InitState == CAPI_InitState.Initializing)
-    {
+    if (DeviceApi.IsPending == false && gCAPI_InitState == CAPI_InitState.Initializing) {
         gCAPI_InitState = CAPI_InitState.Initialized;
         console.debug("Init completed.");
     }
@@ -96,10 +121,8 @@ export function CAPI_PollInitState()
  * Warnings = 2,
  * Verbose = 3
  */
-export function CAPI_SLog_SetLogLevel(loglevel:number)
-{
-    if(loglevel < 0 || loglevel > 3)
-    {
+export function CAPI_SLog_SetLogLevel(loglevel: number) {
+    if (loglevel < 0 || loglevel > 3) {
         SLog.LogError("Invalid log level " + loglevel);
         return;
     }
@@ -108,21 +131,20 @@ export function CAPI_SLog_SetLogLevel(loglevel:number)
 
 
 
-var gCAPI_WebRtcNetwork_Instances: { [id: number]: WebRtcNetwork }= {};
+var gCAPI_WebRtcNetwork_Instances: { [id: number]: WebRtcNetwork } = {};
 var gCAPI_WebRtcNetwork_InstancesNextIndex = 1;
 
 
 export function CAPI_WebRtcNetwork_IsAvailable() {
     //used by C# component to check if this plugin is loaded.
     //can only go wrong due to programming error / packaging
-    if(WebRtcNetwork && WebsocketNetwork)
+    if (WebRtcNetwork && WebsocketNetwork)
         return true;
     return false;
 }
 
 
-export function CAPI_WebRtcNetwork_IsBrowserSupported() 
-{
+export function CAPI_WebRtcNetwork_IsBrowserSupported() {
     if (RTCPeerConnection && RTCDataChannel)
         return true;
 
@@ -144,7 +166,7 @@ export function CAPI_WebRtcNetwork_Create(lConfiguration: string) {
         return -1;
     }
     else {
-        
+
         var conf = JSON.parse(lConfiguration);
 
         if (conf) {
@@ -161,17 +183,16 @@ export function CAPI_WebRtcNetwork_Create(lConfiguration: string) {
             //let signalingNetworkClass = window[signaling_class];
             //let signalingNetworkClass =  new (<any>window)["awrtc.LocalNetwork"];
             //console.debug(signalingNetworkClass);
-            let signalingNetworkClass : any;
-            if(signaling_class === "LocalNetwork")
-            {
+            let signalingNetworkClass: any;
+            if (signaling_class === "LocalNetwork") {
                 signalingNetworkClass = LocalNetwork;
-            }else{
+            } else {
                 signalingNetworkClass = WebsocketNetwork;
             }
 
             let signalingConfig = new SignalingConfig(new signalingNetworkClass(signaling_param));
 
-            
+
             let rtcConfiguration: RTCConfiguration = { iceServers: iceServers };
 
             gCAPI_WebRtcNetwork_Instances[lIndex] = new WebRtcNetwork(signalingConfig, rtcConfiguration);
@@ -330,21 +351,21 @@ export function CAPI_WebRtcNetwork_PeekEm(lIndex: number, lTypeIntArray: Int32Ar
 
 
 
-export function CAPI_MediaNetwork_IsAvailable() : boolean{
+export function CAPI_MediaNetwork_IsAvailable(): boolean {
 
-    if(BrowserMediaNetwork && BrowserWebRtcCall)
+    if (BrowserMediaNetwork && BrowserWebRtcCall)
         return true;
     return false;
 }
 
-export function CAPI_MediaNetwork_HasUserMedia() : boolean{
-    if(navigator && navigator.mediaDevices)
+export function CAPI_MediaNetwork_HasUserMedia(): boolean {
+    if (navigator && navigator.mediaDevices)
         return true;
     return false;
 }
 
-export function CAPI_MediaNetwork_Create(lJsonConfiguration):number {
-    
+export function CAPI_MediaNetwork_Create(lJsonConfiguration): number {
+
     let config = new NetworkConfig();
     config = JSON.parse(lJsonConfiguration);
 
@@ -364,11 +385,11 @@ export function CAPI_MediaNetwork_Create(lJsonConfiguration):number {
 
 
 //Configure(config: MediaConfig): void;
-export function CAPI_MediaNetwork_Configure(lIndex:number, audio: boolean, video: boolean,
+export function CAPI_MediaNetwork_Configure(lIndex: number, audio: boolean, video: boolean,
     minWidth: number, minHeight: number,
     maxWidth: number, maxHeight: number,
     idealWidth: number, idealHeight: number,
-    minFps: number, maxFps: number, idealFps: number, deviceName: string = ""){
+    minFps: number, maxFps: number, idealFps: number, deviceName: string = "") {
 
     let config: MediaConfig = new MediaConfig();
     config.Audio = audio;
@@ -387,14 +408,14 @@ export function CAPI_MediaNetwork_Configure(lIndex:number, audio: boolean, video
     config.VideoDeviceName = deviceName;
 
     config.FrameUpdates = true;
-    
+
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     mediaNetwork.Configure(config);
 
 }
 //GetConfigurationState(): MediaConfigurationState;
-export function CAPI_MediaNetwork_GetConfigurationState(lIndex: number): number{
-    
+export function CAPI_MediaNetwork_GetConfigurationState(lIndex: number): number {
+
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.GetConfigurationState() as number;
 }
@@ -408,17 +429,16 @@ export function CAPI_MediaNetwork_GetConfigurationError(lIndex: number): string 
 }
 
 //ResetConfiguration(): void;
-export function CAPI_MediaNetwork_ResetConfiguration(lIndex: number) : void {
+export function CAPI_MediaNetwork_ResetConfiguration(lIndex: number): void {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.ResetConfiguration();
 }
 
 //TryGetFrame(id: ConnectionId): RawFrame;
 export function CAPI_MediaNetwork_TryGetFrame(lIndex: number, lConnectionId: number,
-            lWidthInt32Array: Int32Array, lWidthIntArrayIndex: number, 
-            lHeightInt32Array: Int32Array, lHeightIntArrayIndex: number,
-            lBufferUint8Array: Uint8Array, lBufferUint8ArrayOffset: number, lBufferUint8ArrayLength: number): boolean
-{
+    lWidthInt32Array: Int32Array, lWidthIntArrayIndex: number,
+    lHeightInt32Array: Int32Array, lHeightIntArrayIndex: number,
+    lBufferUint8Array: Uint8Array, lBufferUint8ArrayOffset: number, lBufferUint8ArrayLength: number): boolean {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     let frame = mediaNetwork.TryGetFrame(new ConnectionId(lConnectionId));
 
@@ -438,18 +458,17 @@ export function CAPI_MediaNetwork_TryGetFrame(lIndex: number, lConnectionId: num
 export function CAPI_MediaNetwork_TryGetFrame_ToTexture(lIndex: number, lConnectionId: number,
     lWidth: number,
     lHeight: number,
-    gl:WebGL2RenderingContext, texture:WebGLTexture): boolean
-{
+    gl: WebGL2RenderingContext, texture: WebGLTexture): boolean {
     //console.log("CAPI_MediaNetwork_TryGetFrame_ToTexture");
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     let frame = mediaNetwork.TryGetFrame(new ConnectionId(lConnectionId));
 
-    if (frame == null ) {
+    if (frame == null) {
         return false;
-    } else if (frame.Width !=  lWidth || frame.Height != lHeight) {
+    } else if (frame.Width != lWidth || frame.Height != lHeight) {
         SLog.LW("CAPI_MediaNetwork_TryGetFrame_ToTexture failed. Width height expected: " + frame.Width + "x" + frame.Height + " but received " + lWidth + "x" + lHeight);
         return false;
-    }else {
+    } else {
         frame.ToTexture(gl, texture);
         return true;
     }
@@ -475,9 +494,8 @@ export function CAPI_MediaNetwork_TryGetFrame_ToTexture2(lIndex: number, lConnec
 }
 */
 export function CAPI_MediaNetwork_TryGetFrame_Resolution(lIndex: number, lConnectionId: number,
-    lWidthInt32Array: Int32Array, lWidthIntArrayIndex: number, 
-    lHeightInt32Array: Int32Array, lHeightIntArrayIndex: number): boolean
-{
+    lWidthInt32Array: Int32Array, lWidthIntArrayIndex: number,
+    lHeightInt32Array: Int32Array, lHeightIntArrayIndex: number): boolean {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     let frame = mediaNetwork.PeekFrame(new ConnectionId(lConnectionId));
 
@@ -491,7 +509,7 @@ export function CAPI_MediaNetwork_TryGetFrame_Resolution(lIndex: number, lConnec
 }
 
 //Returns the frame buffer size or -1 if no frame is available
-export function CAPI_MediaNetwork_TryGetFrameDataLength(lIndex: number, connectionId: number) : number {
+export function CAPI_MediaNetwork_TryGetFrameDataLength(lIndex: number, connectionId: number): number {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     let frame = mediaNetwork.PeekFrame(new ConnectionId(connectionId));
 
@@ -506,14 +524,13 @@ export function CAPI_MediaNetwork_TryGetFrameDataLength(lIndex: number, connecti
     //SLog.L("data length:" + length);
     return length;
 }
-export function CAPI_MediaNetwork_SetVolume(lIndex: number, volume: number, connectionId: number) : void {
+export function CAPI_MediaNetwork_SetVolume(lIndex: number, volume: number, connectionId: number): void {
 
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     mediaNetwork.SetVolume(volume, new ConnectionId(connectionId));
 }
 
-export function CAPI_MediaNetwork_HasAudioTrack(lIndex: number, connectionId: number): boolean
-{
+export function CAPI_MediaNetwork_HasAudioTrack(lIndex: number, connectionId: number): boolean {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.HasAudioTrack(new ConnectionId(connectionId));
 }
@@ -523,43 +540,36 @@ export function CAPI_MediaNetwork_HasVideoTrack(lIndex: number, connectionId: nu
     return mediaNetwork.HasVideoTrack(new ConnectionId(connectionId));
 }
 
-export function CAPI_MediaNetwork_SetMute(lIndex: number, value: boolean)
-{
+export function CAPI_MediaNetwork_SetMute(lIndex: number, value: boolean) {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     mediaNetwork.SetMute(value);
 }
 
-export function CAPI_MediaNetwork_IsMute(lIndex: number)
-{
+export function CAPI_MediaNetwork_IsMute(lIndex: number) {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     return mediaNetwork.IsMute();
 }
 
 
-export function CAPI_DeviceApi_Update():void
-{
+export function CAPI_DeviceApi_Update(): void {
     DeviceApi.Update();
 }
-export function CAPI_DeviceApi_RequestUpdate():void
-{
+export function CAPI_DeviceApi_RequestUpdate(): void {
     DeviceApi.RequestUpdate();
 }
-export function CAPI_DeviceApi_LastUpdate():number
-{
+export function CAPI_DeviceApi_LastUpdate(): number {
     return DeviceApi.LastUpdate;
 }
 
-export function CAPI_Media_GetVideoDevices_Length():number{
+export function CAPI_Media_GetVideoDevices_Length(): number {
     return Media.SharedInstance.GetVideoDevices().length;
 }
-export function CAPI_Media_GetVideoDevices(index:number):string{
+export function CAPI_Media_GetVideoDevices(index: number): string {
     const devs = Media.SharedInstance.GetVideoDevices();
-    if(devs.length > index)
-    {
+    if (devs.length > index) {
         return devs[index];
     }
-    else
-    {
+    else {
         SLog.LE("Requested device with index " + index + " does not exist.");
         //it needs to be "" to behave the same to the C++ API. std::string can't be null
         return "";
@@ -567,11 +577,11 @@ export function CAPI_Media_GetVideoDevices(index:number):string{
 }
 
 
-export function CAPI_VideoInput_AddCanvasDevice(query:string, name:string,  width: number,  height: number,  fps: number): boolean{
+export function CAPI_VideoInput_AddCanvasDevice(query: string, name: string, width: number, height: number, fps: number): boolean {
     let canvas = document.querySelector(query) as HTMLCanvasElement;
-    if(canvas){
-        console.debug("CAPI_VideoInput_AddCanvasDevice", {query, name, width, height, fps});
-        if(width <= 0 || height <= 0){
+    if (canvas) {
+        console.debug("CAPI_VideoInput_AddCanvasDevice", { query, name, width, height, fps });
+        if (width <= 0 || height <= 0) {
             width = canvas.width;
             height = canvas.height;
         }
@@ -580,32 +590,31 @@ export function CAPI_VideoInput_AddCanvasDevice(query:string, name:string,  widt
     }
     return false;
 }
-export function CAPI_VideoInput_AddDevice(name:string,  width: number,  height: number,  fps: number){
+export function CAPI_VideoInput_AddDevice(name: string, width: number, height: number, fps: number) {
     Media.SharedInstance.VideoInput.AddDevice(name, width, height, fps);
 }
 
-export function CAPI_VideoInput_RemoveDevice(name:string){
+export function CAPI_VideoInput_RemoveDevice(name: string) {
     Media.SharedInstance.VideoInput.RemoveDevice(name);
 }
-export function CAPI_VideoInput_UpdateFrame(name:string,
+export function CAPI_VideoInput_UpdateFrame(name: string,
     lBufferUint8Array: Uint8Array, lBufferUint8ArrayOffset: number, lBufferUint8ArrayLength: number,
     width: number, height: number,
-    rotation: number, firstRowIsBottom: boolean) : boolean
-{
-    let dataPtrClamped : Uint8ClampedArray = null;
-    if(lBufferUint8Array && lBufferUint8ArrayLength > 0){
+    rotation: number, firstRowIsBottom: boolean): boolean {
+    let dataPtrClamped: Uint8ClampedArray = null;
+    if (lBufferUint8Array && lBufferUint8ArrayLength > 0) {
         dataPtrClamped = new Uint8ClampedArray(lBufferUint8Array.buffer, lBufferUint8ArrayOffset, lBufferUint8ArrayLength);
     }
-    return Media.SharedInstance.VideoInput.UpdateFrame(name, dataPtrClamped,  width, height, VideoInputType.ARGB,  rotation, firstRowIsBottom);
+    return Media.SharedInstance.VideoInput.UpdateFrame(name, dataPtrClamped, width, height, VideoInputType.ARGB, rotation, firstRowIsBottom);
 }
 
-//TODO: This needs a proper implementation
-//so far only works if unity is the only canvas and uses webgl2
-export function GetUnityCanvas() : HTMLCanvasElement
-{
+
+export function GetUnityCanvas(): HTMLCanvasElement {
+    if (gCAPI_Canvas !== null)
+        return gCAPI_Canvas;
+    SLog.LogWarning("Using GetUnityCanvas without a known cavans reference.");
     return document.querySelector("canvas");
 }
-export function GetUnityContext() : WebGL2RenderingContext
-{
+export function GetUnityContext(): WebGL2RenderingContext {
     return GetUnityCanvas().getContext("webgl2");
 }

@@ -72,7 +72,7 @@ export class BrowserMediaStream {
     //for debugging. Will attach the HTMLVideoElement used to play the local and remote
     //video streams to the document.
     public static DEBUG_SHOW_ELEMENTS = false;
-    
+    public static MUTE_IF_AUTOPLAT_BLOCKED = false;
     
 
     //Gives each FrameBuffer and its HTMLVideoElement a fixed id for debugging purposes.
@@ -103,6 +103,9 @@ export class BrowserMediaStream {
     private mMsPerFrame = 1.0 / BrowserMediaStream.DEFAULT_FRAMERATE * 1000;
 
     private mFrameEventMethod = FrameEventMethod.DEFAULT_FALLBACK;
+    //used to buffer last volume level as part of the
+    //autoplat workaround that will mute the audio until it gets the ok from the user
+    private mDefaultVolume = 0.5;
     
 
     //Time the last frame was generated
@@ -118,7 +121,38 @@ export class BrowserMediaStream {
     private mHasVideo: boolean = false;
 
     public InternalStreamAdded: (stream: BrowserMediaStream) => void = null;
-    
+
+    private static sBlockedStreams : Set<BrowserMediaStream> = new Set();
+    public static onautoplayblocked: () => void = null;
+
+    //must be called from onclick, touchstart, ... event handlers
+    public static ResolveAutoplay() : void{
+
+        SLog.L("ResolveAutoplay. Trying to restart video / turn on audio after user interaction " );
+        let streams = BrowserMediaStream.sBlockedStreams;
+        BrowserMediaStream.sBlockedStreams = new Set();
+        for(let v of Array.from(streams)){
+            v.ResolveAutoplay();
+        }
+    }
+    public ResolveAutoplay():void{
+        
+        if(BrowserMediaStream.MUTE_IF_AUTOPLAT_BLOCKED)
+        {
+            SLog.L("Try to replay video with audio. " );
+            //if muted due to autoplay -> unmute
+            this.SetVolume(this.mDefaultVolume);
+
+            if(this.mVideoElement.muted){
+                this.mVideoElement.muted = false;
+            }
+        }
+
+        //call play again if needed
+        if(this.mVideoElement.paused)
+            this.mVideoElement.play();
+
+    }
 
 
     constructor(stream: MediaStream) {
@@ -175,6 +209,60 @@ export class BrowserMediaStream {
         }
     }
 
+    private TriggerAutoplayBlockled(){
+
+        BrowserMediaStream.sBlockedStreams.add(this);
+        if(BrowserMediaStream.onautoplayblocked !== null){
+            BrowserMediaStream.onautoplayblocked();
+        }
+    }
+
+    private TryPlay(){
+
+        let playPromise = this.mVideoElement.play();
+        this.mDefaultVolume = this.mVideoElement.volume;
+
+        if (typeof playPromise !== "undefined")
+        {
+            playPromise.then(function() {
+                //all good
+            }).catch((error) => {
+
+                if(BrowserMediaStream.MUTE_IF_AUTOPLAT_BLOCKED === false){
+                    //browser blocked replay. print error & setup auto play workaround
+                    console.error(error);
+                    this.TriggerAutoplayBlockled();
+                }else{
+
+                    //Below: Safari on Mac is able to just deactivate audio and show the video
+                    //once user interacts with the content audio will be activated again via SetVolue
+                    //WARNING: This fails on iOS! SetVolume fails and audio won't ever come back
+                    //keep MUTE_IF_AUTOPLAT_BLOCKED === false for iOS support
+                    
+                    console.warn(error);
+                    SLog.LW("Replay of video failed. The browser might have blocked the video due to autoplay restrictions. Retrying without audio ...");
+                    
+                    //try to play without audio enabled
+                    this.SetVolume(0);
+
+                    let promise2 = this.mVideoElement.play();
+
+                    if(typeof promise2 !== "undefined"){
+                        promise2.then(()=>{
+                            SLog.L("Playing video successful but muted.");
+                            //still trigger for unmute on next click
+                            this.TriggerAutoplayBlockled();
+                        }).catch((error)=>{
+                            SLog.LE("Replay of video failed. This error is likely caused due to autoplay restrictions of the browser. Try allowing autoplay.");
+                            console.error(error);
+                            this.TriggerAutoplayBlockled();
+                        });
+                    }
+                }
+            });
+        }
+    }
+
     private SetupElements() {
 
         this.mVideoElement = this.SetupVideoElement();
@@ -190,20 +278,8 @@ export class BrowserMediaStream {
             if(this.mVideoElement == null)
                 return;
 
-                var playPromise = this.mVideoElement.play();
+            this.TryPlay();
 
-                if (typeof playPromise !== "undefined")
-                {
-                    playPromise.then(function() {
-                        //all good
-                    }).catch(function(error) {
-                        //so far we can't handle this error automatically. Some situation this might trigger
-                        //Chrome & Firefox: User only receives audio but doesn't send it & the call was initiated without the user pressing a button.
-                        //Safari: This seems to trigger always on safari unless the user manually allows autoplay
-                        SLog.LE("Replay of video failed. This error is likely caused due to autoplay restrictions of the browser. Try allowing autoplay.");
-                        console.error(error);
-                    });
-                }
             if(this.InternalStreamAdded != null)
                 this.InternalStreamAdded(this);
 
@@ -362,6 +438,7 @@ export class BrowserMediaStream {
     public Dispose(): void {
 
         this.mIsActive = false;
+        BrowserMediaStream.sBlockedStreams.delete(this);
         this.DestroyCanvas();
         if (this.mVideoElement != null && this.mVideoElement.parentElement != null) {
             this.mVideoElement.parentElement.removeChild(this.mVideoElement);
