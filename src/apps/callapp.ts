@@ -29,6 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 import * as awrtc from "../awrtc/index"
+import { MediaConfig } from "../awrtc/index";
 
 /**
  * Main (and most complicated) example for using BrowserWebRtcCall.
@@ -98,10 +99,9 @@ export class CallApp
     }
     
     
-    
 
 
-    public Start(address, audio, video) : void
+    public Start(address: string) : void
     {
         if(this.mCall != null)
             this.Stop();
@@ -112,11 +112,7 @@ export class CallApp
         console.log("Using signaling server url: " + this.mNetConfig.SignalingUrl);
 
         //create media configuration
-        var config = new awrtc.MediaConfig();
-        config.Audio = audio;
-        config.Video = video;
-        config.IdealWidth = 640;
-        config.IdealHeight = 480;
+        var config = this.mMediaConfig;
         config.IdealFps = 30;
         
         //For usage in HTML set FrameUpdates to false and wait for  MediaUpdate to
@@ -268,12 +264,13 @@ export class CallApp
 
 
     //UI calls. should be moved out into its own class later
-    private mAudio;
-    private mVideo;
+    private mMediaConfig : MediaConfig;
     private mAutostart;
     private mUiAddress: HTMLInputElement;
     private mUiAudio: HTMLInputElement;
     private mUiVideo: HTMLInputElement;
+    private mUiWidth: HTMLInputElement;
+    private mUiHeight: HTMLInputElement;
     private mUiButton: HTMLButtonElement;
     private mUiUrl: HTMLElement;
     private mUiLocalVideoParent: HTMLElement;
@@ -281,9 +278,13 @@ export class CallApp
 
     public setupUi(parent : HTMLElement)
     {
+        this.mMediaConfig = new MediaConfig();
         this.mUiAddress = parent.querySelector<HTMLInputElement>(".callapp_address");
         this.mUiAudio = parent.querySelector<HTMLInputElement>(".callapp_send_audio");
         this.mUiVideo = parent.querySelector<HTMLInputElement>(".callapp_send_video");
+        this.mUiWidth =  parent.querySelector<HTMLInputElement>(".callapp_width");
+        this.mUiHeight =  parent.querySelector<HTMLInputElement>(".callapp_height");
+
         this.mUiUrl = parent.querySelector<HTMLParagraphElement>(".callapp_url");
         this.mUiButton = parent.querySelector<HTMLInputElement>(".callapp_button");
         this.mUiLocalVideoParent =  parent.querySelector<HTMLParagraphElement>(".callapp_local_video");
@@ -292,17 +293,9 @@ export class CallApp
         this.mUiVideo.onclick = this.Ui_OnUpdate;
         this.mUiAddress.onkeyup = this.Ui_OnUpdate;
         this.mUiButton.onclick = this.Ui_OnStartStopButtonClicked;
-
-        //set default value + make string "true"/"false" to proper booleans
-        this.mAudio = this.GetParameterByName("audio");
-        this.mAudio  = this.tobool(this.mAudio , true)
         
-        this.mVideo  = this.GetParameterByName("video");
-        this.mVideo  = this.tobool(this.mVideo , true);
-        
-        this.mAutostart = this.GetParameterByName("autostart");
-        this.mAutostart = this.tobool(this.mAutostart, false);
-        this.mAddress = this.GetParameterByName("a");
+        this.UI_ParameterToUi();
+        this.UI_UiToValues();
 
 
         //if autostart is set but no address is given -> create one and reopen the page
@@ -314,7 +307,7 @@ export class CallApp
         {  
             if(this.mAddress === null)
                 this.mAddress = this.GenerateRandomKey();
-                this.Ui_Update();
+                this.Ui_ValuesToUi();
         }
 
         //used for interacting with the Unity CallApp
@@ -327,10 +320,10 @@ export class CallApp
         if(this.mAutostart)
         {
             console.log("Starting automatically ... ")
-            this.Start(this.mAddress, this.mAudio , this.mVideo ); 
+            this.Start(this.mAddress); 
         } 
 
-        console.log("address: " + this.mAddress + " audio: " + this.mAudio  + " video: " + this.mVideo  + " autostart: " + this.mAutostart);
+        console.log("address: " + this.mAddress + " audio: " + this.mMediaConfig.Audio  + " video: " + this.mMediaConfig.Video  + " autostart: " + this.mAutostart);
     }
     private Ui_OnStart(){
         this.mUiButton.textContent = "Stop";
@@ -365,30 +358,77 @@ export class CallApp
     }
 
     public Ui_OnStartStopButtonClicked = ()=>{
+        this.UI_UiToValues();
         if(this.mIsRunning) {
 
             this.Stop();
         }else{
-            this.Start(this.mAddress, this.mAudio, this.mVideo);
+            this.Start(this.mAddress);
         }
 
     }
+    
+    private UI_ParameterToUi() {
+        
+        this.mUiAudio.checked = this.tobool(this.GetParameterByName("audio") , true)
+        this.mUiVideo.checked  = this.tobool(this.GetParameterByName("video") , true);
+        let width = this.GetParameterByName("width");
+        if(width)
+            this.mUiWidth.value = width;
+
+        let height = this.GetParameterByName("height");
+        if(height)
+            this.mUiHeight.value = height;
+        
+            
+        this.mUiAddress.value = this.GetParameterByName("a");
+
+        this.mAutostart = this.GetParameterByName("autostart");
+        this.mAutostart = this.tobool(this.mAutostart, false);
+    }
+    //UI to values
     public Ui_OnUpdate = ()=>
     {
         console.debug("OnUiUpdate");
-        this.mAddress = this.mUiAddress.value;
-        this.mAudio  = this.mUiAudio.checked;
-        this.mVideo  = this.mUiVideo.checked;
-        this.mUiUrl.innerHTML = this.GetUrl();
+        this.UI_UiToValues();
     }
 
-    public Ui_Update() : void
+    
+    private UI_ParseRes(element: HTMLInputElement){
+        if(element)
+        {
+            let val = Math.floor(element.value as any);
+            if(val > 0)
+                return val;
+        }
+        return -1;
+    }
+    private UI_UiToValues(){
+        this.mAddress = this.mUiAddress.value;
+        this.mMediaConfig.Audio  = this.mUiAudio.checked;
+        this.mMediaConfig.Video  = this.mUiVideo.checked;
+
+        this.mMediaConfig.IdealWidth = this.UI_ParseRes(this.mUiWidth);
+        this.mMediaConfig.IdealHeight = this.UI_ParseRes(this.mUiHeight);
+
+        this.mUiUrl.innerHTML = this.ValuesToParameter();
+    }
+    //Values to UI
+    public Ui_ValuesToUi() : void
     {
         console.log("UpdateUi");
         this.mUiAddress.value = this.mAddress;
-        this.mUiAudio.checked = this.mAudio ;
-        this.mUiVideo.checked = this.mVideo ;
-        this.mUiUrl.innerHTML = this.GetUrl();
+        this.mUiAudio.checked = this.mMediaConfig.Audio;
+        this.mUiVideo.checked = this.mMediaConfig.Video;
+        this.mUiWidth.value = "";
+        if(this.mMediaConfig.IdealWidth > 0)
+            this.mUiWidth.value = ""+this.mMediaConfig.IdealWidth;
+        
+        this.mUiHeight.value = "";
+        if(this.mMediaConfig.IdealHeight > 0)
+            this.mUiHeight.value = ""+this.mMediaConfig.IdealHeight;
+                
+        this.mUiUrl.innerHTML = this.ValuesToParameter();
     }
 
     
@@ -400,9 +440,9 @@ export class CallApp
         return result;
     }
     private GetUrlParams() {
-        return "?a=" + this.mAddress + "&audio=" + this.mAudio  + "&video=" + this.mVideo  + "&" + "autostart=" + true;
+        return "?a=" + this.mAddress + "&audio=" + this.mMediaConfig.Audio  + "&video=" + this.mMediaConfig.Video  + "&" + "autostart=" + false;
     }
-    private GetUrl() {
+    private ValuesToParameter() {
         return location.protocol + '//' + location.host + location.pathname + this.GetUrlParams();
     }
 }

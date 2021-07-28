@@ -531,7 +531,6 @@ export class BrowserMediaStream {
         videoElement.width = 320;
         videoElement.height = 240;
         videoElement.controls = true;
-        //TODO: update typescript
         videoElement.setAttribute("playsinline", "");
         videoElement.id = "awrtc_mediastream_video_" + this.mInstanceId;
 
