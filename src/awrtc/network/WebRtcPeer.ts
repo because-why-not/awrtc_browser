@@ -448,10 +448,10 @@ export abstract class AWebRtcPeer {
     //iOS workaround. Streaming from iOS to browser currently fails without this if
     //resolution is above 720p and h264 is active
     private EditProfileLevel(lines: string[]){
-
+        const target_profile_level_id = "2a";
         //TODO: Make sure we only edit H264. There could be other codecs in the future
         //that look identical
-        console.warn("sdp munging: replacing h264 profile-level with 2a");
+        console.warn("sdp munging: replacing h264 profile-level with " + target_profile_level_id);
         let vcodecs_line_index;
         let vcodecs_line_split: string[];
         let vcodecs_list : string[];
@@ -468,7 +468,7 @@ export abstract class AWebRtcPeer {
                     let subline = sublines[k];
                     if(subline.startsWith(searchString)){
                         let len = searchString.length + 4;
-                        sublines[k] = sublines[k].substr(0, len) + "2a";
+                        sublines[k] = sublines[k].substr(0, len) + target_profile_level_id;
                         updateLine = true;
                         break;
                     }

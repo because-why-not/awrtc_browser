@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2019, because-why-not.com Limited
+Copyright (c) 2021, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -214,10 +214,11 @@ export class WebsocketNetwork implements IBasicNetwork  {
         let msg = new Uint8Array(event.data);
         this.ParseMessage(msg);
     }
-    private OnWebsocketOnError(error) {
+    private OnWebsocketOnError(error: Event) {
         //the error event doesn't seem to have any useful information?
         //browser is expected to call OnClose after this
-        SLog.LE('WebSocket Error ' + error);
+        console.error("Websocket triggered onerror: ", error);
+        SLog.LE('WebSocket Error. See browser log for more information. ' + JSON.stringify(error));
     }
     /// <summary>
     /// called during Disconnecting state either trough server connection failed or due to Shutdown

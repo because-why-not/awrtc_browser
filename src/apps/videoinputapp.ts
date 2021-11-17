@@ -365,7 +365,7 @@ export function videoinputapp(parent: HTMLElement, canvas: HTMLCanvasElement) {
     callApp = new VideoInputApp();
     const media = new awrtc.Media();
     const devname = "canvas";
-    awrtc.Media.SharedInstance.VideoInput.AddCanvasDevice(canvas, devname, canvas.width / 2, canvas.height / 2, 30);
+    awrtc.Media.SharedInstance.VideoInput.AddCanvasDevice(canvas, devname, canvas.width, canvas.height, 30);
 
     setInterval(() => {
         awrtc.Media.SharedInstance.VideoInput.UpdateFrame(devname);

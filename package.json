@@ -1,6 +1,6 @@
 {
   "name": "awrtc_browser",
-  "version": "1.985.2",
+  "version": "1.985.4",
   "description": "Compatible browser implementation to the Unity asset WebRTC Video Chat. Try examples in build folder",
   "author": "because-why-not.com Limited",
   "license": "BSD-3-Clause",

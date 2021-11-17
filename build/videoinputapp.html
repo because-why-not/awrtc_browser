@@ -21,8 +21,11 @@
         <div class="callapp_remote_video">remote video</div>
     </div>
 	
-    <canvas id="canvas1"> </canvas>
-
+    <!--<canvas id="canvas1" width="3820" height="1920"> </canvas>-->
+    <!--<canvas id="canvas1" width="2880" height="1440"> </canvas>-->
+    <!--<canvas id="canvas1" width="382" height="192"> </canvas> -->
+    <!--<canvas id="canvas1" width="1920" height="1080"> </canvas> -->
+    <canvas id="canvas1" width="1280" height="720"> </canvas>
     <script> 
     var rgbToHex = function (rgb) { 
         var hex = Number(rgb).toString(16);
@@ -31,20 +34,29 @@
         }
         return hex;
       };
+        const targetFps = 30;
         const canvas = document.querySelector("#canvas1");
         const ctx = canvas.getContext("2d");
         let counter = 0;
         setInterval(()=>{
-            const color = "#FFFF" + rgbToHex(counter%255);
+            const step = counter%255;
+            const relpos = step / 255;
+            const color = "#FFFF" + rgbToHex(step);
             ctx.fillStyle = color;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             counter++;
-        }, 50);
+            
+
+                
+            const posx = (canvas.width-1) * relpos;
+            const posy = (canvas.height-1) * relpos;
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(posx, posy, canvas.width * 0.05, canvas.height * 0.05);
+
+        }, 1000 / targetFps);
         
         apps.videoinputapp(document.querySelector("#videoinputapp1"), canvas);
-
-
-        //apps.callapp(document.querySelector("#callapp2"));
+        
 
     </script>
 </body>
