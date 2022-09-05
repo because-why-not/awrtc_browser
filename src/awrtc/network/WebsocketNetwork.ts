@@ -128,7 +128,8 @@ export class WebsocketNetwork implements IBasicNetwork  {
         this.mSocket.onclose = null;
         if (this.mSocket.readyState == this.mSocket.OPEN
             || this.mSocket.readyState == this.mSocket.CONNECTING) {
-
+            
+            SLog.L("closing websockets");
             this.mSocket.close();
         }
         this.mSocket = null;

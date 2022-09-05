@@ -23,6 +23,7 @@
     "DeviceApiTest.ts",
     "VideoInputTest.ts",
     "BrowserApiTest.ts",
-    "MediaTest.ts"
+    "MediaTest.ts",
+    "CAPITest.ts"
   ]
 }

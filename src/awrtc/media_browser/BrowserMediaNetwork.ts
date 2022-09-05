@@ -27,10 +27,10 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-import { WebRtcNetwork, SLog, ConnectionId, SignalingConfig, IBasicNetwork, LocalNetwork, WebsocketNetwork, WebRtcDataPeer, Queue }
+import { WebRtcNetwork, SLog, ConnectionId, IBasicNetwork, LocalNetwork, WebsocketNetwork, WebRtcDataPeer, Queue, PeerConfig, SLogger }
     from "../network/index";
 import { IMediaNetwork, MediaConfigurationState, MediaEvent, MediaEventType } from "../media/IMediaNetwork";
-import { NetworkConfig } from "../media/NetworkConfig";
+import { NetworkConfig } from "../network/NetworkConfig";
 import { MediaConfig } from "../media/MediaConfig";
 import { IFrameData } from "../media/RawFrame";
 import { MediaPeer } from "./MediaPeer";
@@ -70,12 +70,12 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
     private mConfigurationState: MediaConfigurationState = MediaConfigurationState.Invalid;
     private mConfigurationError: string = null;
     private mMediaEvents: Queue<MediaEvent> = new Queue<MediaEvent>();
+    
 
 
     constructor(config: NetworkConfig) {
-
-        super(BrowserMediaNetwork.BuildSignalingConfig(config.SignalingUrl),
-            BrowserMediaNetwork.BuildRtcConfig(config.IceServers));
+        super(config);
+        this.log = new SLogger("MediaNetwork" + this.mId);
         this.mConfigurationState = MediaConfigurationState.NoConfiguration;
     }
 
@@ -87,10 +87,21 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
      * @param config Detail configuration for audio/video devices.
      */
     public Configure(config: MediaConfig): void {
+
+        if (this.mIsDisposed) {
+            this.OnConfigurationFailed("Network has been disposed.");
+            return;
+        }
+
         this.mMediaConfig = config;
         this.mConfigurationError = null;
         this.mConfigurationState = MediaConfigurationState.InProgress;
 
+        
+        if (this.mLocalStream !== null) {
+            this.mLocalStream.Dispose();
+            this.mLocalStream = null;
+        }
 
 
         if (config.Audio || config.Video) {
@@ -100,25 +111,25 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
                 let promise : Promise<MediaStream> = null;
                 promise = Media.SharedInstance.getUserMedia(config);
                 
-                promise.then((stream) => { //user gave permission
-    
-                        //totally unrelated -> user gave access to devices. use this
-                        //to get the proper names for our DeviceApi
-                        DeviceApi.Update();
+                promise.then((stream) => { 
+                    //exit if the user has shut down the call without pressing allow / deny button
+                    if (this.mIsDisposed)
+                        return;
                     
-                        //call worked -> setup a frame buffer that deals with the rest
-                        this.mLocalStream = new BrowserMediaStream(stream as MediaStream);
-                        //console.debug("Local tracks: ", stream.getTracks());
-                        this.mLocalStream.InternalStreamAdded = (stream)=>{
-                            this.EnqueueMediaEvent(MediaEventType.StreamAdded, ConnectionId.INVALID, this.mLocalStream.VideoElement);
-                        };
-    
-                        //unlike native version this one will happily play the local sound causing an echo
-                        //set to mute
-                        this.mLocalStream.SetMute(true);
-                        this.OnConfigurationSuccess();
-    
-                    });
+
+                    //user gave permission
+                    //call worked -> setup a frame buffer that deals with the rest
+                    this.mLocalStream = new BrowserMediaStream(true, this.log);
+                    stream.getTracks().forEach((x) => { this.mLocalStream.UpdateTrack(x);});
+                    //ensure local audio is not replayed
+                    this.mLocalStream.SetMute(true);
+                    
+                    this.OnLocalStreamUpdated();
+
+                    this.OnConfigurationSuccess();
+
+
+                });
                 promise.catch((err)=> {
                         //failed due to an error or user didn't give permissions
                         SLog.LE(err.name + ": " + err.message);
@@ -126,16 +137,30 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
                     });
             }else{
                 //no access to media device -> fail
-                let error = "Configuration failed. navigator.mediaDevices is unedfined. The browser might not allow media access." +
-                "Is the page loaded via http or file URL? Some browsers only support https!";
+                let error = "Configuration failed. navigator.mediaDevices is undefined. The browser might not allow media access." +
+                "Is the page loaded via http or file URL? Some browsers only support media access via https!";
                 SLog.LE(error);
                 this.OnConfigurationFailed(error);
             }
         } else {
+            this.OnLocalStreamUpdated();
             this.OnConfigurationSuccess();
         }
     }
 
+    private OnLocalStreamUpdated() {
+
+        //update all peers on the change
+        Object.values(this.IdToConnection).forEach(x => (x as MediaPeer).SetLocalStream(this.mLocalStream));
+
+        //set event handler to trigger once all meta data & video element is available
+        if (this.mLocalStream != null)
+        {
+            this.mLocalStream.InternalStreamAdded = (stream)=>{
+                this.EnqueueMediaEvent(MediaEventType.StreamAdded, ConnectionId.INVALID, this.mLocalStream.VideoElement);
+            };
+        }
+    }
     
     
     /**Call this every time a new frame is shown to the user in realtime
@@ -323,11 +348,17 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
             }
         }
     }
-    protected CreatePeer(peerId: ConnectionId, lRtcConfig: RTCConfiguration): WebRtcDataPeer {
-        let peer = new MediaPeer(peerId, lRtcConfig);
+    protected CreatePeer(peerId: ConnectionId): WebRtcDataPeer {
+
+        const config = new PeerConfig(this.mNetConfig);
+        let peer = new MediaPeer(peerId, config, this.log);
         peer.InternalStreamAdded = this.MediaPeer_InternalMediaStreamAdded;
         if (this.mLocalStream != null)
-            peer.AddLocalStream(this.mLocalStream.Stream);
+            setTimeout(async () => { 
+                //SLog.L("Updating local stream");
+                await peer.SetLocalStream(this.mLocalStream);
+                this.log.L("Set local stream to new peer");
+            });
 
         return peer;
     }
@@ -348,24 +379,7 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
         if (this.mLocalStream != null) {
             this.mLocalStream.Dispose();
             this.mLocalStream = null;
-            SLog.L("local buffer disposed");
         }
     }
     
-    private static BuildSignalingConfig(signalingUrl: string): SignalingConfig {
-
-        let signalingNetwork: IBasicNetwork;
-        if (signalingUrl == null || signalingUrl == "") {
-            signalingNetwork = new LocalNetwork();
-        } else {
-            signalingNetwork = new WebsocketNetwork(signalingUrl);
-        }
-        return new SignalingConfig(signalingNetwork);
-    }
-
-    private static BuildRtcConfig(servers: RTCIceServer[]): RTCConfiguration{
-
-        let rtcConfig: RTCConfiguration = { iceServers: servers};
-        return rtcConfig;
-    }
 }

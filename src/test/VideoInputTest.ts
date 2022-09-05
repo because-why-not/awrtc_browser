@@ -26,7 +26,7 @@ export function MakeBrokenTestCanvas(): HTMLCanvasElement {
 }
 
 
-/**Create test image with pattern
+/**Create test chessboard like image with pattern
  * Black White
  * White Black
  * 
@@ -189,6 +189,10 @@ describe("VideoInputTest", () => {
         if (debug)
             document.body.appendChild(videoOutput);
         videoOutput.onloadedmetadata = () => {
+            //chrome only returns image data once play is called
+            //firefox works without play
+            videoOutput.play();
+            
             expect(videoOutput.videoWidth).toBe(dst_width)
             expect(videoOutput.videoHeight).toBe(dst_height)
 
@@ -210,7 +214,7 @@ describe("VideoInputTest", () => {
         }
         videoOutput.srcObject = stream;
 
-    }, 1000);
+    }, 2000);
 
     //not yet clear how this can be handled
     //this test will trigger an error in firefox

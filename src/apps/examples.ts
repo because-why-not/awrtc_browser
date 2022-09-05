@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import * as awrtc from "../awrtc/index"
 import { DefaultValues, GetRandomKey, GetParameterByName } from "./apphelpers";
-import { WebsocketNetwork } from "../awrtc/index";
+import { NetworkConfig, PeerConfig, WebsocketNetwork } from "../awrtc/index";
 
 //Creates two WebRtcNetwork objects and connects them
 //directly + sends test messages
@@ -38,15 +38,17 @@ export function WebRtcNetwork_minimal() {
 
     var testMessage = "test1234";
 
-    var websocketurl: string = DefaultValues.Signaling;
+    
 
-    let rtcConfig: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302"] } as RTCIceServer] };
+    const config = new NetworkConfig();
+    config.IceServers = [{ urls: ["stun:stun.l.google.com:19302"] } as RTCIceServer];
+    config.SignalingUrl = DefaultValues.Signaling;
 
 
-    var srv = new awrtc.WebRtcNetwork(new awrtc.SignalingConfig(new WebsocketNetwork(websocketurl)), rtcConfig);
+    var srv = new awrtc.WebRtcNetwork(config);
     srv.StartServer();
 
-    var clt = new awrtc.WebRtcNetwork(new awrtc.SignalingConfig(new WebsocketNetwork(websocketurl)), rtcConfig);
+    var clt = new awrtc.WebRtcNetwork(config);
 
 
     setInterval(() => {

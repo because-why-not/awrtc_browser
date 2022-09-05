@@ -28,19 +28,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import {IBasicNetwork, ConnectionId, NetworkEvent, NetEventType} from "./index"
-import { Queue, Helper, SLog, Debug, Output, Random } from "./Helper";
-
-export class SignalingConfig {
-    private mNetwork: IBasicNetwork;
-
-    constructor(network: IBasicNetwork) {
-        this.mNetwork = network;
-    }
-    public GetNetwork(): IBasicNetwork {
-        return this.mNetwork;
-    }
-
-}
+import { Queue, Helper, SLog, Debug, Output, Random, SLogger } from "./Helper";
+import { NetworkConfig } from "index";
 
 export class SignalingInfo {
 
@@ -85,7 +74,7 @@ export enum WebRtcPeerState {
     Invalid,
     Created, //freshly created peer. didn't start to connect yet but can receive message to trigger it
     Signaling, //webrtc started the process of connecting 2 peers
-    SignalingFailed, //connection failed to be established -> either cleanup/close or try again (not yet possible)
+    SignalingFailed, //connection failed to be established -> either cleanup/close or try again
     Connected, //connection is running
     Closing, //Used before Close call to block reaction to webrtc events coming back
     Closed //either Closed call finished or closed remotely or Cleanup/Dispose finished -> peer connection is destroyed and all resources are released
@@ -97,13 +86,45 @@ export enum WebRtcInternalState {
     Connected, //all channels opened
     Closed //at least one channel was closed
 }
+
+
+
+export class PeerConfig{
+    public RtcConfig: RTCConfiguration;
+    public MaxIceRestart: number;
+
+    constructor(netConfig: NetworkConfig) {
+        
+        this.MaxIceRestart = netConfig.MaxIceRestart;
+        this.RtcConfig = netConfig.BuildRtcConfig();
+    }
+    
+}
+
 export abstract class AWebRtcPeer {
+    //activates additional log messages
+    public readonly DEBUG = false;
+    public LOG_SIGNALING = true;
+
+    //true will activate the ice restart mechanism. false means it will destroy the peer on "failed" event
+    protected USE_ICE_RESTART: boolean;
+    //TODO: Check for better handling of ice restart & data channels on firefox
+    //on chrome data channels remain open during ice failed and continue to work after ice restart
+    //on firefox they (sometimes) permanently close and never recover
+    //for now we simply ignore the closed event which would usually trigger a complete closure of this peer
+    //Only active if MAX_RETRIES > 0
+    //This is off by default for now meaning ice restart won't work reliably if firefox is involved
+    protected USE_ICE_RESTART_DC_WORKAROUND = false;
+    protected MAX_RETRIES = 2;
+    private mRetries = 0;
+    //private mReconnectInterval?: ReturnType<typeof setTimeout> = null;
 
     private mState = WebRtcPeerState.Invalid;
     public GetState(): WebRtcPeerState {
         return this.mState;
     }
 
+    //private mReconnectInterval?: ReturnType<typeof setTimeout> = null;
     //only written during webrtc callbacks
     private mRtcInternalState = WebRtcInternalState.None;
 
@@ -112,27 +133,57 @@ export abstract class AWebRtcPeer {
     private mIncomingSignalingQueue: Queue<string> = new Queue<string>();
     private mOutgoingSignalingQueue: Queue<string> = new Queue<string>();
 
+    
+    
+    /**new experimental peer configuration: It tries to avoid negotiation to allow cutting the signaling connection
+     * For this transceivers are always created with sendrecv even if no track is available yet. 
+     * Later replaceTrack is used to attach / detach any tracks
+     * This causes a bug in browsers though: If an audio track is active but no video track yet audio playback does not start
+     */
+     public readonly SINGLE_NEGOTIATION = false;
 
-    //Used to negotiate who starts the signaling if 2 peers listening
-    //at the same time
-    private mDidSendRandomNumber = false;
-    private mRandomNumerSent = 0;
+     //Decides how offer/answer roles are treated if renegotiation is triggered after the first connection succeeded
+     //true = offer/answer role is decided using random numbers to avoid collisions
+     //false = keeps offer/answer role the same - this is faster but can cause an error if both sides trigger renegotiation at the same time
+    public readonly RENEGOTATE_ROLES = true;
+    
+
+    //true - We are in the process of sending random numbers back & forth between the peers to decide
+    //who will be offerer / answerer
+    private mInActiveRoleNegotiation = false;
+
+    //true - by default we attempt to negotiate roles and fall back if we receive an offer/answer instead of a random number
+    //
+    //This is automatically set to false once StartSignaling is called and results in this peer ignoring random numbers until signaling is completed
+    private mUseRoleNegotiation = true;
+    private mRandomNumberSent = 0;
 
 
-    protected mOfferOptions: RTCOfferOptions = { "offerToReceiveAudio": false, "offerToReceiveVideo": false };
     
     private mReadyForIce = false;
-    private mBufferedIceCandidates : RTCIceCandidate[] = [];
+    private mBufferedIceCandidates: RTCIceCandidate[] = [];
+    //True means this peer will permanently have the offerer role
+    private mIsOfferer = false;
 
 
-    constructor(rtcConfig: RTCConfiguration) {
-        this.SetupPeer(rtcConfig);
+    private static sNextId = 0;
+    protected readonly mId;
+    protected log: SLogger;
+
+    constructor(peerConfig: PeerConfig, baseLogger: SLogger) {
+        this.mId = AWebRtcPeer.sNextId++;
+        this.log = baseLogger.CreateSub("Peer" + this.mId);
+        this.USE_ICE_RESTART = peerConfig.MaxIceRestart > 0;
+        this.MAX_RETRIES = peerConfig.MaxIceRestart;
+        this.SetupPeer(peerConfig.RtcConfig);
         //remove this. it will trigger this call before the subclasses
         //are initialized
         this.OnSetup();
         this.mState = WebRtcPeerState.Created;
+        if(this.DEBUG)
+            (window as any)["peer"+this.mId] = this;
     }
-
+    
     protected abstract OnSetup(): void;
     protected abstract OnStartSignaling(): void;
     protected abstract OnCleanup(): void;
@@ -141,27 +192,28 @@ export abstract class AWebRtcPeer {
         
         this.mPeer = new RTCPeerConnection(rtcConfig);
         this.mPeer.onicecandidate = this.OnIceCandidate;
-        this.mPeer.oniceconnectionstatechange =  this.OnIceConnectionStateChange; 
-        this.mPeer.onicegatheringstatechange = this.OnIceGatheringStateChange;
-        this.mPeer.onnegotiationneeded = this.OnRenegotiationNeeded;
-        this.mPeer.onconnectionstatechange = this.OnConnectionStateChange;
-        this.mPeer.onsignalingstatechange = this.OnSignalingChange;
 
+        //this.mPeer.oniceconnectionstatechange =  this.OnIceConnectionStateChange; 
+        this.mPeer.onconnectionstatechange = this.OnConnectionStateChange;
+        this.mPeer.onicegatheringstatechange = this.OnIceGatheringStateChange;
+        this.mPeer.onnegotiationneeded = this.OnNegotiationNeeded;
+
+        this.mPeer.onsignalingstatechange = this.OnSignalingChange;
     }
     
 
     protected DisposeInternal(): void {
-        this.Cleanup();
+        this.Cleanup("Dispose was called");
     }
 
     public Dispose(): void {
-
         if (this.mPeer != null) {
             this.DisposeInternal();
         }
     }
 
-    private Cleanup(): void {
+    private Cleanup(reason:string): void {
+        
         //closing webrtc could cause old events to flush out -> make sure we don't call cleanup
         //recursively
         if (this.mState == WebRtcPeerState.Closed || this.mState == WebRtcPeerState.Closing) {
@@ -169,7 +221,7 @@ export abstract class AWebRtcPeer {
         }
 
         this.mState = WebRtcPeerState.Closing;
-
+        this.log.L("Peer is closing down. reason: " + reason);
         this.OnCleanup();
 
         if (this.mPeer != null)
@@ -189,8 +241,8 @@ export abstract class AWebRtcPeer {
         if (this.mState != WebRtcPeerState.Closed && this.mState != WebRtcPeerState.Closing && this.mState != WebRtcPeerState.SignalingFailed)
             this.UpdateState();
 
-        if (this.mState == WebRtcPeerState.Signaling || this.mState == WebRtcPeerState.Created)
-            this.HandleIncomingSignaling();
+        //if (this.mState == WebRtcPeerState.Signaling || this.mState == WebRtcPeerState.Created)
+        this.HandleIncomingSignaling();
     }
 
     private UpdateState(): void {
@@ -201,7 +253,7 @@ export abstract class AWebRtcPeer {
 
             //webrtc closed the connection. update internal state + destroy the references
             //to webrtc
-            this.Cleanup();
+            this.Cleanup("WebRTC triggered an event to initiate shutdown (see log above).");
             //mState will be Closed now as well
         } else if (this.mRtcInternalState == WebRtcInternalState.SignalingFailed) {
             //if webrtc switched to a state indicating the signaling process failed ->  set the whole state to failed
@@ -225,11 +277,13 @@ export abstract class AWebRtcPeer {
      */
     private StartIce(){
 
-        Debug.Log("accepting ice candidates");
+        if(this.DEBUG)
+            this.log.L("accepting ice candidates. buffered " + this.mBufferedIceCandidates.length);
         this.mReadyForIce = true;
         if(this.mBufferedIceCandidates.length > 0)
         {
-            Debug.Log("adding locally buffered ice candidates");
+            if(this.DEBUG)
+                this.log.L("adding locally buffered ice candidates");
             //signaling active. Forward ice candidates we received so far
             const candidates = this.mBufferedIceCandidates;
             this.mBufferedIceCandidates = [];
@@ -244,9 +298,9 @@ export abstract class AWebRtcPeer {
         try{
             let promise = this.mPeer.addIceCandidate(ice);
             promise.then(() => {/*success*/ });
-            promise.catch((error: DOMError) => { Debug.LogError(error); });
+            promise.catch((error: any) => { this.log.LE(error); });
         }catch(error){
-            Debug.LogError(error);
+            this.log.LE(error);
         }
     }
 
@@ -258,27 +312,35 @@ export abstract class AWebRtcPeer {
 
             let randomNumber = Helper.tryParseInt(msgString);
             if (randomNumber != null) {
-                //was a random number for signaling negotiation
-
-                //if this peer uses negotiation as well then
-                //this would be true
-                if (this.mDidSendRandomNumber) {
-                    //no peer is set to start signaling -> the one with the bigger number starts
-
-                    if (randomNumber < this.mRandomNumerSent) {
+                
+                if (this.mUseRoleNegotiation)
+                {
+                    //We use random numbers as tie breaker in several situations:
+                    // 1. The signaling connects two peers without one of the peers starting the connection (shared_address mode)
+                    //   in which case both sides get a new "incoming" connection and will send out random numbers immediately
+                    // 2. The server uses custom code and sends a random number to force the client into offer or answerer role 
+                    // 3. Renegotiation was triggered
+                    if (this.mInActiveRoleNegotiation === false) {
+                        //the other side triggered a role negotiation without us knowing -> also trigger our side first
+                        this.log.L("Remote side requested renegotiation.");
+                        this.NegotiateSignaling();
+                    }
+                    
+                    if (randomNumber < this.mRandomNumberSent) {
                         //own diced number was bigger -> start signaling
-                        SLog.L("Signaling negotiation complete. Starting signaling.");
-                        this.StartSignaling();
-                    } else if (randomNumber == this.mRandomNumerSent) {
+                        this.log.L("Role negotiation complete. Starting signaling.");
+                        this.StartSignalingInternal();
+                    } else if (randomNumber == this.mRandomNumberSent) {
                         //same numbers. restart the process
+                        this.log.L("Retrying role negotiation");
                         this.NegotiateSignaling();
                     } else {
                         //wait for other peer to start signaling
-                        SLog.L("Signaling negotiation complete. Waiting for signaling.");
+                        this.log.L("Role negotiation complete. Waiting for signaling.");
                     }
                 } else {
-                    //ignore. this peer starts signaling automatically and doesn't use this
-                    //negotiation
+                    //ignore random number from the other side. This peer has deactivated it
+                    this.log.L("Other side attempted role negotiation but this is inactive. Ignored " + randomNumber);
                 }
             }
             else {
@@ -320,7 +382,8 @@ export abstract class AWebRtcPeer {
     }
 
     public AddSignalingMessage(msg: string): void {
-        Debug.Log("incoming Signaling message " + msg);
+        if (this.LOG_SIGNALING)
+            this.log.L("incoming Signaling message " + msg);
         this.mIncomingSignalingQueue.Enqueue(msg);
     }
 
@@ -343,32 +406,58 @@ export abstract class AWebRtcPeer {
     private EnqueueOutgoing(msg: string): void {
         //lock(mOutgoingSignalingQueue)
         {
-            Debug.Log("Outgoing Signaling message " + msg);
+            if (this.LOG_SIGNALING)
+                this.log.L("Outgoing Signaling message " + msg);
             this.mOutgoingSignalingQueue.Enqueue(msg);
         }
     }
 
-
+    //Starts signaling. This forces this peer to create an offer. The other side must automatically
+    //switch to answer role
     public StartSignaling(): void {
+        //user triggers signaling. For backwards compatibility we turn off
+        //role negotiation which always means this peer creates the offer
+        SLog.L("StartSignaling signaling by forcing offer role");
+        this.mUseRoleNegotiation = false;
+        this.StartSignalingInternal();
+    }
 
+    //Triggers data channel setup if needed and then creates & sends an offer
+    private StartSignalingInternal(): void {
         this.OnStartSignaling();
         this.CreateOffer();
     }
+    //Similar to StartSignaling but this will first send out a random number
+    //the higher number starts signaling and creates an offer
     public NegotiateSignaling(): void {
-        
-        let nb = Random.getRandomInt(0, 2147483647);
-        this.mRandomNumerSent = nb;
-        this.mDidSendRandomNumber = true;
+        //0 - reserved to force a remote peer into answer mode
+        //2147483647 - reserved to force a remote peer into offer mode
+        let nb = Random.getRandomInt(1, 2147483647);
+        this.mRandomNumberSent = nb;
+        this.mInActiveRoleNegotiation = true;
+        SLog.L("Attempting to negotiate signaling using number " + this.mRandomNumberSent);
         this.EnqueueOutgoing("" + nb);
     }
 
-    private CreateOffer(): void {
-        Debug.Log("CreateOffer");
+    /**Triggers the actual createOffer method on the Peer
+     * Can be overridden to ensure specific transceiver configurations are performed
+     * before the actual answer is created.
+     * @returns Promise returned by createOffer
+     */
+    protected CreateOfferImpl() {
+        const mOfferOptions: RTCOfferOptions = { "offerToReceiveAudio": false, "offerToReceiveVideo": false };
+        return this.mPeer.createOffer(mOfferOptions);
+    }
 
+    private CreateOffer(): void {
+        this.mIsOfferer = true;
+        this.mReadyForIce = false;
+        this.mInActiveRoleNegotiation = false;
         
 
 
-        let createOfferPromise = this.mPeer.createOffer(this.mOfferOptions);
+        this.log.L("CreateOffer");
+        let createOfferPromise = this.CreateOfferImpl();
         createOfferPromise.then((desc_in: RTCSessionDescription) => {
             let desc_out = this.ProcLocalSdp(desc_in);
             let msg: string = JSON.stringify(desc_out);
@@ -379,15 +468,15 @@ export abstract class AWebRtcPeer {
                 this.RtcSetSignalingStarted();
                 this.EnqueueOutgoing(msg);
             });
-            setDescPromise.catch((error: DOMError) => {
-                Debug.LogError(error);
-                Debug.LogError("Error during setLocalDescription with sdp: " + JSON.stringify(desc_in));
-                this.RtcSetSignalingFailed();
+            setDescPromise.catch((error: any) => {
+                this.log.LE(error);
+                this.log.LE("Error during setLocalDescription with sdp: " + JSON.stringify(desc_in));
+                this.RtcSetSignalingFailed("Failed to set the offer as local description.");
             });
         });
-        createOfferPromise.catch((error: DOMError) => {
-            Debug.LogError(error);
-            this.RtcSetSignalingFailed();
+        createOfferPromise.catch((error: any) => {
+            this.log.LE(error);
+            this.RtcSetSignalingFailed("Failed to create an offer.");
         });
     }
 
@@ -395,7 +484,7 @@ export abstract class AWebRtcPeer {
     private EditCodecs(lines: string[]){
 
         let prefCodec = "H264";
-        console.warn("sdp munging: prioritizing codec " + prefCodec);
+        this.log.LW("sdp munging: prioritizing codec " + prefCodec);
 
         //index and list of all video codec id's
         //e.g.: m=video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102 121 127 120 125 107 108 109 35 36 124 119 123 118 114 115 116
@@ -491,7 +580,7 @@ export abstract class AWebRtcPeer {
         let sdp_out = "";
         let lines = sdp_in.split("\r\n");
 
-        this.EditCodecs(lines);
+        //this.EditCodecs(lines);
         //this.EditProfileLevel(lines);
 
         sdp_out = lines.join("\r\n");
@@ -501,19 +590,37 @@ export abstract class AWebRtcPeer {
     private ProcRemoteSdp(desc: RTCSessionDescription) : RTCSessionDescription{
         if(AWebRtcPeer.MUNGE_SDP === false)
             return desc;
-        //console.warn("sdp munging active");
-        return desc;
+        console.warn("sdp munging active");
+        let sdp_in = desc.sdp;
+        let sdp_out = "";
+        let lines = sdp_in.split("\r\n");
+        this.EditCodecs(lines);
+        sdp_out = lines.join("\r\n");
+        let desc_out = {type: desc.type, sdp: sdp_out} as RTCSessionDescription;
+
+        return desc_out;
+    }
+
+    /**Triggers the actual createAnswer method on the Peer
+     * Can be overridden to ensure specific transceiver configurations are performed
+     * before the actual answer is created.
+     * @returns Promise returned by createAnswer
+     */
+    protected CreateAnswerImpl() {
+        return this.mPeer.createAnswer();
     }
 
 
     private CreateAnswer(offer: RTCSessionDescription): void {
-        Debug.Log("CreateAnswer");
+        this.log.L("CreateAnswer");
+        this.mInActiveRoleNegotiation = false;
+        this.mReadyForIce = false;
         
         offer = this.ProcRemoteSdp(offer);
         let remoteDescPromise = this.mPeer.setRemoteDescription(offer);
         remoteDescPromise.then(() => {
             this.StartIce();
-            let createAnswerPromise = this.mPeer.createAnswer();
+            let createAnswerPromise = this.CreateAnswerImpl();
             createAnswerPromise.then((desc_in: RTCSessionDescription) => {
                 let desc_out = this.ProcLocalSdp(desc_in);
                 let msg: string = JSON.stringify(desc_out);
@@ -522,36 +629,37 @@ export abstract class AWebRtcPeer {
                     this.RtcSetSignalingStarted();
                     this.EnqueueOutgoing(msg);
                 });
-                localDescPromise.catch((error: DOMError) => {
-                    Debug.LogError(error);
-                    this.RtcSetSignalingFailed();
+                localDescPromise.catch((error: any) => {
+                    this.log.LE(error);
+                    this.RtcSetSignalingFailed("Failed to set the answer as local description.");
                 });
                 
             });
-            createAnswerPromise.catch( (error: DOMError) => {
-                Debug.LogError(error);
-                this.RtcSetSignalingFailed();
+            createAnswerPromise.catch( (error: any) => {
+                this.log.LE(error);
+                this.RtcSetSignalingFailed("Failed to create an answer.");
             });
             
         });
-        remoteDescPromise.catch((error: DOMError) => {
-            Debug.LogError(error);
-            this.RtcSetSignalingFailed();
+        remoteDescPromise.catch((error: any) => {
+            this.log.LE(error);
+            this.RtcSetSignalingFailed("Failed to set the offer as remote description.");
         });
     }
 
 
     private RecAnswer(answer: RTCSessionDescription): void {
-        Debug.Log("RecAnswer");
+        if(this.DEBUG)
+            this.log.LW("RecAnswer");
         answer = this.ProcRemoteSdp(answer);
         let remoteDescPromise = this.mPeer.setRemoteDescription(answer);
         remoteDescPromise.then(() => {
             //all done
             this.StartIce();
         });
-        remoteDescPromise.catch((error: DOMError) => {
-            Debug.LogError(error);
-            this.RtcSetSignalingFailed();
+        remoteDescPromise.catch((error: any) => {
+            this.log.LE(error);
+            this.RtcSetSignalingFailed("Failed to set the answer as remote description.");
         });
         
     }
@@ -561,7 +669,8 @@ export abstract class AWebRtcPeer {
             this.mRtcInternalState = WebRtcInternalState.Signaling;
         }
     }
-    protected RtcSetSignalingFailed(): void {
+    protected RtcSetSignalingFailed(reason: string): void {
+        this.log.L("Signaling failed: " + reason);
         this.mRtcInternalState = WebRtcInternalState.SignalingFailed;
     }
 
@@ -569,10 +678,19 @@ export abstract class AWebRtcPeer {
         if (this.mRtcInternalState == WebRtcInternalState.Signaling)
             this.mRtcInternalState = WebRtcInternalState.Connected;
     }
-    protected RtcSetClosed(): void {
+    /**Called if a WebRTC side event leads to this peer closing
+     * e.g. ice failed, data channel suddenly closed
+     * This must not be an error. It might just be the remote side ending the call
+     * which will usually result in the data channels closing.
+     * @param reason Additional information for logging
+     */
+    protected RtcSetClosed(reason: string): void {
         if (this.mRtcInternalState == WebRtcInternalState.Connected)
         {
-            Debug.Log("triggering closure");
+            if (this.mState !== WebRtcPeerState.Closed
+                && this.mState !== WebRtcPeerState.Closing) {
+                    this.log.L("WebRTC side event triggered closure. Reason: " + reason);
+            }
             this.mRtcInternalState = WebRtcInternalState.Closed;
         }
             
@@ -589,10 +707,10 @@ export abstract class AWebRtcPeer {
         }
     }
 
-
+    /*
     private OnIceConnectionStateChange = (ev: Event): void =>
     {
-        Debug.Log("oniceconnectionstatechange: " + this.mPeer.iceConnectionState);
+        this.log.LW("oniceconnectionstatechange: " + this.mPeer.iceConnectionState);
         //Chrome stopped emitting "failed" events. We have to react to disconnected events now
         if (this.mPeer.iceConnectionState == "failed" || this.mPeer.iceConnectionState == "disconnected")
         {
@@ -601,40 +719,130 @@ export abstract class AWebRtcPeer {
                 this.RtcSetSignalingFailed();
             }else if(this.mState == WebRtcPeerState.Connected)
             {
-                this.RtcSetClosed();
+                this.RtcSetClosed("ice connection state changed to " + this.mPeer.iceConnectionState);
+            }
+        }
+    }
+    */
+    
+    //this replaces IceConnectionStateChange
+    //It works the same between chrome and firefox if adapter.js is used 
+    private OnConnectionStateChange = (ev:Event): void =>
+    {
+        if (this.DEBUG)
+            this.log.LW("onconnectionstatechange: " + this.mPeer.connectionState);
+        if (this.mPeer.connectionState === 'failed') {
+            
+            
+            if (this.USE_ICE_RESTART && this.mRetries < this.MAX_RETRIES)
+            {
+                //retry to connect
+                this.mRetries++;
+                if (this.mIsOfferer)
+                {
+                    if(this.DEBUG)
+                        this.log.LW("Try to reconnect. Attempt " + (this.mRetries));
+                    this.RestartIce();
+                } else {
+                    if(this.DEBUG)
+                        this.log.LW("Wait for reconnect");// Attempt " + (this.mRetries));
+                }
+            } else {
+                if (this.mRetries >= this.MAX_RETRIES) {
+                    this.log.LW("Shutting down peer. IceRestart failed " + (this.mRetries) + "times");
+                }
+                if(this.mState == WebRtcPeerState.Signaling)
+                {
+                    //never had a connection established
+                    this.RtcSetSignalingFailed("connectionState switched to failed");
+                }else if(this.mState == WebRtcPeerState.Connected)
+                {
+                    //connection was established and failed
+                    this.RtcSetClosed("ice connection state changed to " + this.mPeer.iceConnectionState);
+                }
+            }
+        } else if (this.mPeer.connectionState === "connected") {
+            this.mRetries = 0;
+            if (this.RENEGOTATE_ROLES)
+            {
+                //switch mUseRoleNegotiation back on for the next negotiation attempt
+                this.mUseRoleNegotiation = true;
             }
         }
     }
 
-    /*
-    So far useless. never triggered in firefox.
-    In Chrome it triggers together with the DataChannels opening which might be more useful in the future
-    */
-    private OnConnectionStateChange = (ev:Event): void =>
-    {
-        Debug.Log("onconnectionstatechange: " + this.mPeer.iceConnectionState);
+    private TriggerRestartIce() {
+        this.mPeer.restartIce();
+        this.log.LW("restartIce + starting signaling");
+        this.StartSignalingInternal();
     }
+
+    private RestartIce() {
+        
+        this.TriggerRestartIce();
+        
+        /*
+        if (this.mReconnectInterval === null) {
+            //retry immediately on the first call
+            this.TriggerRestartIce();
+            //then repeat every 15 sec (and ignore any other calls to RestartIce)
+            this.log.LW("starting reconnect interval.");
+            this.mReconnectInterval = setInterval(() => {
+                if (this.mPeer.connectionState === "connected") {
+                    this.log.LW("reconnect worked.");
+                    clearInterval(this.mReconnectInterval);
+                    this.mReconnectInterval = null;
+                } else {
+                    this.log.LW("restart ice has not reconnected the peers yet. Retrying ...");
+                    this.TriggerRestartIce();
+                }
+            }, 15000);
+        }
+            */
+    }
+
 
     private OnIceGatheringStateChange = (ev:Event): void =>
     {
-        Debug.Log("onicegatheringstatechange: " + this.mPeer.iceGatheringState);
+        if(this.DEBUG)
+            this.log.L("onicegatheringstatechange: " + this.mPeer.iceGatheringState);
     }
 
-    private OnRenegotiationNeeded = (ev:Event): void =>
+    private OnNegotiationNeeded = (ev:Event): void =>
     {
-
+        //we ignore OnNegotiationNeeded during the first trigger when the peer isn't connected yet
+        //(handled separately)
+        if (this.mState == WebRtcPeerState.Connected)
+        {
+            //if the peer is configured for single negotiation we skip this event
+            //it likely indicates an error as this should never happen
+            if (this.SINGLE_NEGOTIATION) {
+                this.log.LW("OnNegotiationNeeded: ignored because the peer is configured for single negotiation."
+                    + " This can indicate the peer is configured incorrectly and media will not be sent.");
+            } else if (this.RENEGOTATE_ROLES) {
+                this.log.L("OnNegotiationNeeded: renegotiating signaling roles");
+                this.NegotiateSignaling();
+            } else {
+                //user triggered Configure
+                this.log.L("starting signaling due to OnNegotiationNeeded and RENEGOTATE_ROLES=false");
+                this.StartSignalingInternal();
+            }
+        }
+        
     }
 
     //broken in chrome. won't switch to closed anymore
     private OnSignalingChange = (ev:Event): void =>
     {
-        Debug.Log("onsignalingstatechange:" + this.mPeer.signalingState);
+        if(this.DEBUG)
+            this.log.LW("onsignalingstatechange:" + this.mPeer.signalingState);
         //obsolete
         if (this.mPeer.signalingState == "closed") {
-            this.RtcSetClosed();
+            this.RtcSetClosed("signaling state changed to " + this.mPeer.signalingState);
         }
     }
 }
+
 
 export class WebRtcDataPeer extends AWebRtcPeer {
 
@@ -659,12 +867,12 @@ export class WebRtcDataPeer extends AWebRtcPeer {
     private mReliableDataChannelReady: boolean = false;
     private mUnreliableDataChannelReady: boolean = false;
 
-    private mReliableDataChannel: RTCDataChannel;
-    private mUnreliableDataChannel: RTCDataChannel;
+    private mReliableDataChannel: RTCDataChannel = null;
+    private mUnreliableDataChannel: RTCDataChannel = null;
 
 
-    public constructor(id: ConnectionId, rtcConfig: RTCConfiguration) {
-        super(rtcConfig);
+    public constructor(id: ConnectionId, peerConfig: PeerConfig, baseLogger: SLogger) {
+        super(peerConfig, baseLogger);
         this.mConnectionId = id;
     }
 
@@ -672,17 +880,24 @@ export class WebRtcDataPeer extends AWebRtcPeer {
         this.mPeer.ondatachannel = (ev: Event) => { this.OnDataChannel((ev as any).channel); };
     }
 
+    //Triggers if this peer starts the signaling. Not triggered on answer side
+    //TODO: better renamed to OnBeforeOffer?
     protected OnStartSignaling(): void {
 
-        let configReliable: RTCDataChannelInit = {} as RTCDataChannelInit;
-        this.mReliableDataChannel = this.mPeer.createDataChannel(WebRtcDataPeer.sLabelReliable, configReliable);
-        this.RegisterObserverReliable();
+        if (this.mReliableDataChannel === null) {
+            let configReliable: RTCDataChannelInit = {} as RTCDataChannelInit;
+            this.mReliableDataChannel = this.mPeer.createDataChannel(WebRtcDataPeer.sLabelReliable, configReliable);
+            this.RegisterObserverReliable();
+        }
 
-        let configUnreliable: RTCDataChannelInit = {} as RTCDataChannelInit;
-        configUnreliable.maxRetransmits = 0;
-        configUnreliable.ordered = false;
-        this.mUnreliableDataChannel = this.mPeer.createDataChannel(WebRtcDataPeer.sLabelUnreliable, configUnreliable);
-        this.RegisterObserverUnreliable();
+        if (this.mUnreliableDataChannel === null) {
+            let configUnreliable: RTCDataChannelInit = {} as RTCDataChannelInit;
+            configUnreliable.maxRetransmits = 0;
+            configUnreliable.ordered = false;
+            this.mUnreliableDataChannel = this.mPeer.createDataChannel(WebRtcDataPeer.sLabelUnreliable, configUnreliable);
+            this.RegisterObserverUnreliable();
+        }
+
     }
 
     protected OnCleanup(): void {
@@ -743,7 +958,7 @@ export class WebRtcDataPeer extends AWebRtcPeer {
                 }
             }
         } catch (e) {
-            SLog.LogError("Exception while trying to send: " + e);
+            this.log.LE("Exception while trying to send: " + e);
         }
         return sentSuccessfully;
     }
@@ -764,7 +979,7 @@ export class WebRtcDataPeer extends AWebRtcPeer {
                 }
             }
         } catch (e) {
-            SLog.LogError("Exception while trying to access GetBufferedAmount: " + e);
+            this.log.LE("Exception while trying to access GetBufferedAmount: " + e);
         }
         return result;
     }
@@ -801,7 +1016,7 @@ export class WebRtcDataPeer extends AWebRtcPeer {
             this.RegisterObserverUnreliable();
         }
         else {
-            Debug.LogError("Datachannel with unexpected label " + newChannel.label);
+            this.log.LE("Datachannel with unexpected label " + newChannel.label);
         }
 
     }
@@ -831,56 +1046,80 @@ export class WebRtcDataPeer extends AWebRtcPeer {
             fileReader.readAsArrayBuffer(event.data);
 
         } else {
-            Debug.LogError("Invalid message type. Only blob and arraybuffer supported: " + event.data);
+            this.log.LE("Invalid message type. Only blob and arraybuffer supported: " + event.data);
         }
     }
 
 
     private ReliableDataChannel_OnMessage(event: MessageEvent): void {
-        Debug.Log("ReliableDataChannel_OnMessage ");
+        this.log.L("ReliableDataChannel_OnMessage ");
         this.RtcOnMessageReceived(event, true);
     }
 
     private ReliableDataChannel_OnOpen(): void {
-        Debug.Log("mReliableDataChannelReady");
+        if(this.DEBUG)
+            this.log.LW("mReliableDataChannelReady");
         this.mReliableDataChannelReady = true;
         if (this.IsRtcConnected()) {
             this.RtcSetConnected();
-            Debug.Log("Fully connected");
+            this.log.L("Fully connected");
         }
     }
 
     private ReliableDataChannel_OnClose(): void {
-        this.RtcSetClosed();
+        let msg = "reliable data channel closed";
+        if (this.USE_ICE_RESTART && this.USE_ICE_RESTART_DC_WORKAROUND && this.MAX_RETRIES > 0
+            && this.GetState() == WebRtcPeerState.Connected) {
+            //note this warning can often be ignored: If this is a planned shutdown whole peer
+            //will be closed and the shutdown is correct processed even when ignoring this event.
+            //only if ice restart is attempted this warning indicates that while the connection
+            //recovers out data channels did not (only happens with firefox)
+            this.log.LW("ICE_RESTART_DC_WORKAROUND: Ignoring data channel closure. " + msg);
+            return;
+        }
+        this.RtcSetClosed(msg);
     }
 
-    private ReliableDataChannel_OnError(errorMsg: string) : void
+    private ReliableDataChannel_OnError(error: any) : void
     {
-        Debug.LogError(errorMsg);
-        this.RtcSetClosed();
+        let err = "reliable data channel error: " + JSON.stringify(error);
+        this.log.LE(err);
+        this.RtcSetClosed(err);
     }
 
     private UnreliableDataChannel_OnMessage(event: MessageEvent): void {
-        Debug.Log("UnreliableDataChannel_OnMessage ");
+        this.log.L("UnreliableDataChannel_OnMessage ");
         this.RtcOnMessageReceived(event, false);
     }
 
     private UnreliableDataChannel_OnOpen(): void {
-        Debug.Log("mUnreliableDataChannelReady");
+        if(this.DEBUG)
+            this.log.LW("mUnreliableDataChannelReady");
         this.mUnreliableDataChannelReady = true;
         if (this.IsRtcConnected()) {
             this.RtcSetConnected();
-            Debug.Log("Fully connected");
+            this.log.L("Fully connected");
         }
     }
 
     private UnreliableDataChannel_OnClose(): void {
-        this.RtcSetClosed();
+        let msg = "unreliable data channel closed";
+        if (this.USE_ICE_RESTART && this.USE_ICE_RESTART_DC_WORKAROUND && this.MAX_RETRIES > 0
+            && this.GetState() == WebRtcPeerState.Connected) {
+            //note this warning can often be ignored: If this is a planned shutdown whole peer
+            //will be closed and the shutdown is correct processed even when ignoring this event.
+            //only if ice restart is attempted this warning indicates that while the connection
+            //recovers out data channels did not (only happens with firefox)
+            this.log.LW("ICE_RESTART_DC_WORKAROUND: Ignoring data channel closure. " + msg);
+            return;
+        }
+        this.RtcSetClosed(msg);
     }
 
-    private UnreliableDataChannel_OnError(errorMsg: string): void {
-        Debug.LogError(errorMsg);
-        this.RtcSetClosed();
+    private UnreliableDataChannel_OnError(error: any): void {
+        let err = "reliable data channel error: " + JSON.stringify(error);
+        this.log.LE(err);
+        this.RtcSetClosed(err);
     }
 
     private IsRtcConnected(): boolean {

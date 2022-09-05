@@ -99,6 +99,37 @@ export class Output<T>
 {
     public val : T;
 }
+
+export class SLogger{
+    private mPrefix: string;
+    public get Prefix() {
+        return this.mPrefix;
+    }
+    public set Prefix(prefix:string) {
+        this.mPrefix = prefix;
+    }
+
+    constructor(prefix: string) {
+        this.mPrefix = prefix;
+    }
+
+    public CreateSub(subPrefix: string): SLogger {
+        return new SLogger(this.mPrefix + "." + subPrefix);
+    }
+
+    public LV(txt: string) {
+        SLog.L(this.mPrefix + ": " + txt);
+    }
+    public L(txt: string) {
+        SLog.L(this.mPrefix + ": " + txt);
+    }
+    public LW(txt: string) {
+        SLog.LW(this.mPrefix + ": " + txt);
+    }
+    public LE(txt: string) {
+        SLog.LE(this.mPrefix + ": " + txt);
+    }
+}
 export class Debug {
     public static Log(s: any) {
         SLog.Log(s);
@@ -158,7 +189,7 @@ export class Encoding {
 }
 
 export class Random {
-
+    //value between min and max (not including max)
     public static getRandomInt(min, max): number {
         min = Math.ceil(min);
         max = Math.floor(max);

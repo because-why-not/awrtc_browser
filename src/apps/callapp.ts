@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019, because-why-not.com Limited
+Copyright (c) 2022, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 import * as awrtc from "../awrtc/index"
-import { MediaConfig } from "../awrtc/index";
+import { DeviceApi, Media, MediaConfig } from "../awrtc/index";
 
 /**
  * Main (and most complicated) example for using BrowserWebRtcCall.
@@ -43,11 +43,6 @@ import { MediaConfig } from "../awrtc/index";
  * - setup to be compatible with the Unity Asset's CallApp (but without TURN server!)
  * - Get parameters from the address line to configure the call
  * - autostart the call (this might not work in all browsers. Mostly used for testing)
- * Todo:
- * - text message system (so far it sends back the same message)
- * - conference call support 
- * 
- * 
  */
 export class CallApp
 {
@@ -62,6 +57,11 @@ export class CallApp
     private mRemoteVideo = {};
     
     private mIsRunning = false;
+    //true on startup, false once first config completed and connection attempts are made
+    private mWaitForInitialConfig = true;
+
+    private mAutoRejoin = true;
+
 
     public constructor()
     {
@@ -69,12 +69,12 @@ export class CallApp
             {urls: "stun:stun.because-why-not.com:443"},
             {urls: "stun:stun.l.google.com:19302"}
         ];
-        //use for testing conferences 
-        //this.mNetConfig.IsConference = true;
-        //this.mNetConfig.SignalingUrl = "wss://signaling.because-why-not.com/testshared";
         this.mNetConfig.IsConference = false;
         this.mNetConfig.SignalingUrl = "wss://signaling.because-why-not.com/callapp";
+        //this.mNetConfig.KeepSignalingAlive = true;
+        //this.mNetConfig.MaxIceRestart = 2;
     }
+
 
     
     
@@ -101,10 +101,10 @@ export class CallApp
     
 
 
-    public Start(address: string) : void
+    public Start() : void
     {
         if(this.mCall != null)
-            this.Stop();
+            this.Cleanup();
         
         this.mIsRunning = true;
         this.Ui_OnStart()
@@ -114,6 +114,8 @@ export class CallApp
         //create media configuration
         var config = this.mMediaConfig;
         config.IdealFps = 30;
+        
+        this.mMediaConfig.VideoDeviceName = this.UI_GetVideoDevice(); 
         
         //For usage in HTML set FrameUpdates to false and wait for  MediaUpdate to
         //get the VideoElement. By default awrtc would deliver frames individually
@@ -136,17 +138,26 @@ export class CallApp
             this.Update();
         }, 50);
 
-
+        
+        this.mWaitForInitialConfig = true;
         //configure media. This will request access to media and can fail if the user doesn't have a proper device or
         //blocks access
         this.mCall.Configure(config);
-
-        //Try to listen to the address 
-        //Conference mode = everyone listening will connect to each other
-        //Call mode -> If the address is free it will wait for someone else to connect
-        //          -> If the address is used then it will fail to listen and then try to connect via Call(address);
-        this.mCall.Listen(address);
         
+        //Now we wait for the "ConfigurationComplete" event to continue
+
+    }
+
+    public Reconfigure(new_config:MediaConfig) {
+
+        const old_config = this.mMediaConfig;
+        this.mMediaConfig = new_config;
+        if (this.mCall !== null)
+        {
+            console.log("Trigger reconfigure from " + old_config.toString());
+            console.log("to " + new_config.toString());
+            this.mCall.Configure(this.mMediaConfig);
+        }
     }
 
     
@@ -154,6 +165,17 @@ export class CallApp
     public Stop(): void
     {
         this.Cleanup();
+    }
+
+    
+    private CheckAutoRejoin() {
+        if (this.mAutoRejoin) {
+            setTimeout(() => {
+                if (this.mIsRunning === false) {
+                    this.Start();
+                }
+            }, 1000);
+        }
     }
 
     private Cleanup():void{
@@ -182,23 +204,33 @@ export class CallApp
         //User gave access to requested camera/ microphone
         if (args.Type == awrtc.CallEventType.ConfigurationComplete){
             console.log("configuration complete");
+
+            
+            if (this.mWaitForInitialConfig) {
+                //Try to listen to the address 
+                //Conference mode = everyone listening will connect to each other
+                //Call mode -> If the address is free it will wait for someone else to connect
+                //          -> If the address is used then it will fail to listen and then try to connect via Call(address);
+                console.log(`Attempt to listen on ${this.mAddress}`);
+                this.mCall.Listen(this.mAddress);
+            }
+            this.mWaitForInitialConfig = false; 
         }
         else if (args.Type == awrtc.CallEventType.MediaUpdate) {
             
             let margs = args as awrtc.MediaUpdatedEventArgs;
-            if (this.mLocalVideo == null && margs.ConnectionId == awrtc.ConnectionId.INVALID) {
+            if (margs.ConnectionId == awrtc.ConnectionId.INVALID) {
 
                 var videoElement = margs.VideoElement;
-                this.mLocalVideo = videoElement;
+                
                 this.Ui_OnLocalVideo(videoElement);
                 console.log("local video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
             }
-            else if (margs.ConnectionId != awrtc.ConnectionId.INVALID && this.mRemoteVideo[margs.ConnectionId.id] == null) {
+            else {
                 
                 var videoElement = margs.VideoElement;
-                this.mRemoteVideo[margs.ConnectionId.id] = videoElement;
                 this.Ui_OnRemoteVideo(videoElement, margs.ConnectionId);
-                console.log("remote video added resolution:" + videoElement.videoWidth  + videoElement.videoHeight + " fps: ??");
+                console.log("remote video added resolution:" + videoElement.videoWidth  + "x" + videoElement.videoHeight + " fps: ??");
             }
         }
         else if (args.Type == awrtc.CallEventType.ListeningFailed) {
@@ -207,6 +239,7 @@ export class CallApp
             if (this.mNetConfig.IsConference == false) {
                 //no conference call and listening failed? someone might have claimed the address.
                 //Try to connect to existing call
+                console.log(`Attempt to call ${this.mAddress}`);
                 this.mCall.Call(this.mAddress);
             }
             else {
@@ -214,6 +247,7 @@ export class CallApp
                 console.error(errorMsg);
                 this.Ui_OnError(errorMsg);
                 this.Cleanup();
+                this.CheckAutoRejoin();
                 return;
             }
         }
@@ -224,6 +258,7 @@ export class CallApp
             console.error(errorMsg);
             this.Ui_OnError(errorMsg);
             this.Cleanup();
+            this.CheckAutoRejoin();
             return;
         }
         else if (args.Type == awrtc.CallEventType.CallEnded) {
@@ -237,18 +272,23 @@ export class CallApp
             {
                 //1 to 1 call and only user left -> quit
                 this.Cleanup();
+                this.CheckAutoRejoin();
                 return;
             }
         }
         else if (args.Type == awrtc.CallEventType.Message) {
-            //no ui for this yet. simply echo messages for testing
+            
             let messageArgs = args as awrtc.MessageEventArgs;
-            this.mCall.Send(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
+            let type = "unreliable";
+            if (messageArgs.Reliable) {
+                type = "reliable"
+            }
+            console.warn(`Message from ${messageArgs.ConnectionId.id} via ${type} dc received: ${messageArgs.Content} `);
+            //this.mCall.Send(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
         }
         else if (args.Type == awrtc.CallEventType.DataMessage) {
-            //no ui for this yet. simply echo messages for testing
             let messageArgs = args as awrtc.DataMessageEventArgs;
-            this.mCall.SendData(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
+            //this.mCall.SendData(messageArgs.Content, messageArgs.Reliable, messageArgs.ConnectionId);
         }
         else if (args.Type == awrtc.CallEventType.CallAccepted) {
             let arg = args as awrtc.CallAcceptedEventArgs;
@@ -269,6 +309,7 @@ export class CallApp
     private mUiAddress: HTMLInputElement;
     private mUiAudio: HTMLInputElement;
     private mUiVideo: HTMLInputElement;
+    private mUiVideoDevices: HTMLSelectElement;
     private mUiWidth: HTMLInputElement;
     private mUiHeight: HTMLInputElement;
     private mUiButton: HTMLButtonElement;
@@ -279,11 +320,20 @@ export class CallApp
     public setupUi(parent : HTMLElement)
     {
         this.mMediaConfig = new MediaConfig();
+
+
+        
+        let devname = "Screen capture";
+        Media.SharedInstance.EnableScreenCapture(devname);
+        this.mMediaConfig.VideoDeviceName = devname;
+
         this.mUiAddress = parent.querySelector<HTMLInputElement>(".callapp_address");
         this.mUiAudio = parent.querySelector<HTMLInputElement>(".callapp_send_audio");
         this.mUiVideo = parent.querySelector<HTMLInputElement>(".callapp_send_video");
         this.mUiWidth =  parent.querySelector<HTMLInputElement>(".callapp_width");
-        this.mUiHeight =  parent.querySelector<HTMLInputElement>(".callapp_height");
+        this.mUiHeight = parent.querySelector<HTMLInputElement>(".callapp_height");
+        this.mUiVideoDevices = parent.querySelector<HTMLSelectElement>(".video_devices");
+        this.UI_UpdateVideoDevices();
 
         this.mUiUrl = parent.querySelector<HTMLParagraphElement>(".callapp_url");
         this.mUiButton = parent.querySelector<HTMLInputElement>(".callapp_button");
@@ -293,6 +343,10 @@ export class CallApp
         this.mUiVideo.onclick = this.Ui_OnUpdate;
         this.mUiAddress.onkeyup = this.Ui_OnUpdate;
         this.mUiButton.onclick = this.Ui_OnStartStopButtonClicked;
+        this.mUiVideoDevices.addEventListener('change', () => {
+            this.UI_OnVideoDeviceUpdate();
+        });
+        
         
         this.UI_ParameterToUi();
         this.UI_UiToValues();
@@ -320,10 +374,10 @@ export class CallApp
         if(this.mAutostart)
         {
             console.log("Starting automatically ... ")
-            this.Start(this.mAddress); 
+            this.Start(); 
         } 
 
-        console.log("address: " + this.mAddress + " audio: " + this.mMediaConfig.Audio  + " video: " + this.mMediaConfig.Video  + " autostart: " + this.mAutostart);
+        console.log(`setupUi: address: ${this.mAddress} + audio: ${this.mMediaConfig.Audio} video: ${ this.mMediaConfig.Video } autostart: ${ this.mAutostart }`);
     }
     private Ui_OnStart(){
         this.mUiButton.textContent = "Stop";
@@ -337,6 +391,8 @@ export class CallApp
         while (this.mUiRemoteVideoParent.hasChildNodes()) {   
             this.mUiRemoteVideoParent.removeChild(this.mUiRemoteVideoParent.firstChild);
         }
+
+        this.UI_UpdateVideoDevices();
     }
     private Ui_OnLog(msg:string){
 
@@ -344,26 +400,43 @@ export class CallApp
     private Ui_OnError(msg:string){
 
     }
-    private Ui_OnLocalVideo(video : HTMLVideoElement){
-        this.mUiLocalVideoParent.appendChild( document.createElement("br"));
-        this.mUiLocalVideoParent.appendChild(video);
+    private Ui_OnLocalVideo(video_element: HTMLVideoElement) {
+        
+        if (this.mLocalVideo != null) {
+            //This is currently done within MediaStream to ensure
+            //memory doesn't leak
+            //remove old video
+            //this.mUiLocalVideoParent.removeChild(this.mLocalVideo);
+        }
+
+        if (video_element !== null) {
+            video_element.setAttribute("width", "100%")
+            video_element.setAttribute("height", "100%")
+            this.mUiLocalVideoParent.appendChild(video_element);
+        }
+        this.mLocalVideo = video_element;
     }
 
-    private Ui_OnRemoteVideo(video : HTMLVideoElement, id: awrtc.ConnectionId){
-
-        this.mUiRemoteVideoParent.appendChild( document.createElement("br"));
-        this.mUiRemoteVideoParent.appendChild(new Text("connection " + id.id));
-        this.mUiRemoteVideoParent.appendChild( document.createElement("br"));
+    private Ui_OnRemoteVideo(video: HTMLVideoElement, id: awrtc.ConnectionId) {
+        
+        if (id.id in this.mRemoteVideo) {
+            const old_video = this.mRemoteVideo[id.id];
+            //this.mUiRemoteVideoParent.removeChild(old_video);
+            delete this.mRemoteVideo[id.id];
+        }
+        this.mRemoteVideo[id.id] = video;
+        video.setAttribute("width", "100%")
+        video.setAttribute("height", "100%")
         this.mUiRemoteVideoParent.appendChild(video);
     }
 
     public Ui_OnStartStopButtonClicked = ()=>{
-        this.UI_UiToValues();
         if(this.mIsRunning) {
 
             this.Stop();
         }else{
-            this.Start(this.mAddress);
+            this.UI_UiToValues();
+            this.Start();
         }
 
     }
@@ -386,6 +459,47 @@ export class CallApp
         this.mAutostart = this.GetParameterByName("autostart");
         this.mAutostart = this.tobool(this.mAutostart, false);
     }
+    
+    public UI_UpdateVideoDevices() {
+        
+        DeviceApi.UpdateAsync().then(() => { 
+
+            const selectedIndex = this.mUiVideoDevices.selectedIndex;
+            while(this.mUiVideoDevices.options.length > 0)
+                this.mUiVideoDevices.options[0].remove();
+            
+            let devices = Media.SharedInstance.GetVideoDevices()
+
+            devices.forEach(x => {
+                const opt = document.createElement("option");
+                opt.text = x;
+                opt.value = x;
+                this.mUiVideoDevices.add(opt);
+            });
+            if(selectedIndex !== -1 && selectedIndex < this.mUiVideoDevices.options.length)
+            {
+                this.mUiVideoDevices.selectedIndex = selectedIndex;
+            } else {
+                this.mUiVideoDevices.selectedIndex = 0;
+            }
+        });
+    }
+    public UI_GetVideoDevice() : string{
+        const index = this.mUiVideoDevices.selectedIndex;
+        if (index === -1 || index >= this.mUiVideoDevices.options.length)
+            return null;
+        const name = this.mUiVideoDevices.options[index].value;
+        return name;
+    }
+    private UI_OnVideoDeviceUpdate() {
+        const device = this.UI_GetVideoDevice();
+        if (this.mIsRunning) {
+            const newConfig = this.mMediaConfig.clone();
+            newConfig.VideoDeviceName = this.UI_GetVideoDevice();
+            this.Reconfigure(newConfig);
+        }
+    }
+
     //UI to values
     public Ui_OnUpdate = ()=>
     {
@@ -405,11 +519,16 @@ export class CallApp
     }
     private UI_UiToValues(){
         this.mAddress = this.mUiAddress.value;
-        this.mMediaConfig.Audio  = this.mUiAudio.checked;
-        this.mMediaConfig.Video  = this.mUiVideo.checked;
 
-        this.mMediaConfig.IdealWidth = this.UI_ParseRes(this.mUiWidth);
-        this.mMediaConfig.IdealHeight = this.UI_ParseRes(this.mUiHeight);
+        let newConfig = this.mMediaConfig.clone();
+
+        newConfig.Audio  = this.mUiAudio.checked;
+        newConfig.Video  = this.mUiVideo.checked;
+
+        newConfig.IdealWidth = this.UI_ParseRes(this.mUiWidth);
+        newConfig.IdealHeight = this.UI_ParseRes(this.mUiHeight);
+
+        this.Reconfigure(newConfig);
 
         this.mUiUrl.innerHTML = this.ValuesToParameter();
     }
@@ -451,6 +570,7 @@ export class CallApp
 
 export function callapp(parent: HTMLElement)
 {
+
     let callApp : CallApp;
     console.log("init callapp");
     if(parent == null)

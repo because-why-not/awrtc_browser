@@ -30,8 +30,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /**This file contains the mapping between the awrtc_browser library and
  * Unitys WebGL support. Not needed for regular use.
  */
-import { SLog, WebRtcNetwork, SignalingConfig, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork } from "../network/index"
-import { MediaConfigurationState, NetworkConfig, MediaConfig } from "../media/index";
+import { SLog, WebRtcNetwork, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork, NetworkConfig, SLogger } from "../network/index"
+import { MediaConfigurationState, MediaConfig } from "../media/index";
 import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media, VideoInputType } from "../media_browser/index";
 
 
@@ -55,14 +55,15 @@ var CAPI_InitState = {
 var gCAPI_InitState = CAPI_InitState.Uninitialized;
 var gCAPI_Canvas: HTMLCanvasElement = null;
 
-declare var GLctx: any;
 
-export function CAPI_InitAsync(initmode) {
+
+export function CAPI_InitAsync(initmode, glctx) {
     console.debug("CAPI_InitAsync mode: " + initmode);
     gCAPI_InitState = CAPI_InitState.Initializing;
 
-    if (GLctx && GLctx.canvas) {
-        gCAPI_Canvas = GLctx.canvas as HTMLCanvasElement;
+    //if (typeof GLctx !== 'undefined' && GLctx.canvas) {
+    if (glctx && glctx.canvas) {
+        gCAPI_Canvas = glctx.canvas as HTMLCanvasElement;
     }
     InitAutoplayWorkaround();
 
@@ -131,8 +132,8 @@ export function CAPI_SLog_SetLogLevel(loglevel: number) {
 
 
 
-var gCAPI_WebRtcNetwork_Instances: { [id: number]: WebRtcNetwork } = {};
-var gCAPI_WebRtcNetwork_InstancesNextIndex = 1;
+export let gCAPI_WebRtcNetwork_Instances: { [id: number]: WebRtcNetwork } = {};
+export let gCAPI_WebRtcNetwork_InstancesNextIndex = 1;
 
 
 export function CAPI_WebRtcNetwork_IsAvailable() {
@@ -152,58 +153,22 @@ export function CAPI_WebRtcNetwork_IsBrowserSupported() {
 }
 
 
-export function CAPI_WebRtcNetwork_Create(lConfiguration: string) {
+export function CAPI_WebRtcNetwork_Create(lConfiguration: string) : number{
     var lIndex = gCAPI_WebRtcNetwork_InstancesNextIndex;
     gCAPI_WebRtcNetwork_InstancesNextIndex++;
 
-    var signaling_class = "LocalNetwork";
-    var signaling_param: any = null;
-    var iceServers: RTCIceServer[];
-
+    
     if (lConfiguration == null || typeof lConfiguration !== 'string' || lConfiguration.length === 0) {
 
         SLog.LogError("invalid configuration. Returning -1! Config: " + lConfiguration);
         return -1;
     }
     else {
-
-        var conf = JSON.parse(lConfiguration);
-
-        if (conf) {
-
-            if (conf.signaling) {
-                signaling_class = conf.signaling.class;
-                signaling_param = conf.signaling.param;
-            }
-            if (conf.iceServers) {
-                iceServers = conf.iceServers;
-            }
-            SLog.L(signaling_class);
-            //this seems to be broken after switch to modules
-            //let signalingNetworkClass = window[signaling_class];
-            //let signalingNetworkClass =  new (<any>window)["awrtc.LocalNetwork"];
-            //console.debug(signalingNetworkClass);
-            let signalingNetworkClass: any;
-            if (signaling_class === "LocalNetwork") {
-                signalingNetworkClass = LocalNetwork;
-            } else {
-                signalingNetworkClass = WebsocketNetwork;
-            }
-
-            let signalingConfig = new SignalingConfig(new signalingNetworkClass(signaling_param));
-
-
-            let rtcConfiguration: RTCConfiguration = { iceServers: iceServers };
-
-            gCAPI_WebRtcNetwork_Instances[lIndex] = new WebRtcNetwork(signalingConfig, rtcConfiguration);
-        } else {
-            SLog.LogWarning("Parsing configuration failed. Configuration: " + lConfiguration);
-            return -1;
-        }
+        
+        const config = new NetworkConfig();
+        config.FromJson(lConfiguration);
+        gCAPI_WebRtcNetwork_Instances[lIndex] = new WebRtcNetwork(config);
     }
-    //gCAPI_WebRtcNetwork_Instances[lIndex].OnLog = function (lMsg) {
-    //    console.debug(lMsg);
-    //};
     return lIndex;
 }
 
@@ -367,7 +332,8 @@ export function CAPI_MediaNetwork_HasUserMedia(): boolean {
 export function CAPI_MediaNetwork_Create(lJsonConfiguration): number {
 
     let config = new NetworkConfig();
-    config = JSON.parse(lJsonConfiguration);
+    config.FromJson(lJsonConfiguration);
+    
 
     let mediaNetwork = new BrowserMediaNetwork(config);
 
@@ -607,7 +573,10 @@ export function CAPI_VideoInput_UpdateFrame(name: string,
     }
     return Media.SharedInstance.VideoInput.UpdateFrame(name, dataPtrClamped, width, height, VideoInputType.ARGB, rotation, firstRowIsBottom);
 }
-
+export function CAPI_Media_EnableScreenCapture(name: string): void {
+    
+    return Media.SharedInstance.EnableScreenCapture(name);
+}
 
 export function GetUnityCanvas(): HTMLCanvasElement {
     if (gCAPI_Canvas !== null)

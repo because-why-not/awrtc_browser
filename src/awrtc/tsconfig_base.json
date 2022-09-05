@@ -19,15 +19,17 @@
     "./network/WebRtcPeer.ts",
     "./network/WebsocketNetwork.ts",
     "./network/LocalNetwork.ts",
+    "./network/NetworkConfig.ts",
     "./network/index.ts",
+
     "./media/CallEventArgs.ts",
     "./media/ICall.ts",
     "./media/IMediaNetwork.ts",
     "./media/MediaConfig.ts",
-    "./media/NetworkConfig.ts",
     "./media/RawFrame.ts",
     "./media/AWebRtcCall.ts",
     "./media/index.ts",
+
     "./media_browser/BrowserMediaNetwork.ts",
     "./media_browser/BrowserWebRtcCall.ts",
     "./media_browser/BrowserMediaStream.ts",

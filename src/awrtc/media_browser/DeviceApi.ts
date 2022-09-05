@@ -97,7 +97,7 @@ export class DeviceApi
             }catch(e)
             {
                 SLog.LE("Error in DeviceApi user event handler: " + e);
-                console.exception(e);
+                console.error(e);
             }
         }
     }
@@ -192,10 +192,9 @@ export class DeviceApi
         DeviceApi.sIsPending = false;
     }
 
-    private static InternalOnErrorCatch = (err:DOMError)=>
+    private static InternalOnErrorCatch = (err:any)=>
     {
-        let txt :string = err.toString();
-        DeviceApi.InternalOnErrorString(txt);
+        DeviceApi.InternalOnErrorString(JSON.stringify(err));
     }
     private static InternalOnErrorString = (err:string)=>
     {
@@ -230,7 +229,7 @@ export class DeviceApi
     }
     public static async UpdateAsync():Promise<void>
     {
-        return new Promise((resolve, fail)=>{
+        return new Promise<void>((resolve, fail)=>{
 
             DeviceApi.sLastError = null;
             if(DeviceApi.IsApiAvailable() == false)
@@ -399,17 +398,19 @@ export class DeviceApi
         return constraints;
     }
 
-    public static getBrowserUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream>{
+    public static async getBrowserUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream>{
 
-        return navigator.mediaDevices.getUserMedia(constraints);
+        const res = await navigator.mediaDevices.getUserMedia(constraints);
+        //after calling getUserMedia the browsers give us more accurate device names
+        //buffer names now for any future synchronous access
+        DeviceApi.Update();
+        return res;
     }
-    public static getAssetUserMedia(config: MediaConfig): Promise<MediaStream>{
-        return new Promise((resolve)=>{
-            const res = DeviceApi.ToConstraints(config);
-            resolve(res);
-        }).then((constraints)=>{
-            return DeviceApi.getBrowserUserMedia(constraints as MediaStreamConstraints);
-        });        
+    public static async getAssetUserMedia(config: MediaConfig): Promise<MediaStream>{
+        
+        const constraints = DeviceApi.ToConstraints(config);
+        const result = await DeviceApi.getBrowserUserMedia(constraints);
+        return result;
     }
 
 }

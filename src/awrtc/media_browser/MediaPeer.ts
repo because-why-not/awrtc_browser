@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2019, because-why-not.com Limited
+Copyright (c) 2022, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-import { WebRtcDataPeer, SLog } from "../network/index";
+import { WebRtcDataPeer, ConnectionId, PeerConfig, SLogger, SLog } from "../network/index";
 import { BrowserMediaStream } from "./BrowserMediaStream";
 import { IFrameData } from "../media/RawFrame";
 
@@ -47,30 +47,89 @@ export interface RTCPeerConnectionObsolete extends RTCPeerConnection
 export class MediaPeer extends WebRtcDataPeer
 {
     private mRemoteStream: BrowserMediaStream = null;
+    mAudioSender: RTCRtpSender = null;
+    mVideoSender: RTCRtpSender = null;
     //quick workaround to allow html user to get the HTMLVideoElement once it is
     //created. Might be done via events later to make wrapping to unity/emscripten possible
     public InternalStreamAdded: (peer:MediaPeer, stream: BrowserMediaStream) => void = null;
     
-    //true - will use obsolete onstream / add stream
-    //false - will use ontrack / addtrack (seems to work fine now even on chrome)
-    public static sUseObsolete = false;
+    
 
+    public constructor(connecitonId: ConnectionId, peerConfig:PeerConfig, baseLogger: SLogger) {
+        super(connecitonId, peerConfig, baseLogger);
+    }
+    
     
     protected OnSetup(): void {
         super.OnSetup();
-        //TODO: test in different browsers if boolean works now
-        //this is unclear in the API. according to typescript they are boolean, in native code they are int
-        //and some browser failed in the past if boolean was used ... 
-        this.mOfferOptions = { "offerToReceiveAudio": true, "offerToReceiveVideo": true };
-        
-        if(MediaPeer.sUseObsolete) {
-            SLog.LW("Using obsolete onaddstream as not all browsers support ontrack");
-            (this.mPeer as RTCPeerConnectionObsolete).onaddstream = (streamEvent: RTCMediaStreamEvent) => { this.OnAddStream(streamEvent); };
+        this.mPeer.ontrack = (ev: RTCTrackEvent) => { this.OnTrack(ev); }
+    }
+
+    private getTransceiverByKind(kind){
+        for(const tr of this.mPeer.getTransceivers())
+        {
+            if ((tr.receiver !== null && tr.receiver.track !== null && tr.receiver.track.kind == kind)
+                || (tr.sender !== null && tr.sender.track !== null && tr.sender.track.kind == kind)) {
+                return tr;
+            }
         }
-        else{
-            this.mPeer.ontrack = (ev:RTCTrackEvent)=>{this.OnTrack(ev);}
+        return null;
+    }
+
+    
+    
+    protected override CreateOfferImpl(): Promise<RTCSessionDescriptionInit> {
+        if (this.SINGLE_NEGOTIATION) {
+            //if we haven't added a transceiver yet we do it here
+            //this is roughly the same as this.mPeer.createOffer(offerOptions);
+            //except we always set the direction to "sendrecv".
+            //This causes the browser to create inactive dummy tracks until we
+            //replace them with our own later
+            
+            if (this.getTransceiverByKind("audio") == null)
+            {
+                this.log.L("Add transceiver for audio");
+                let atransceiver = this.mPeer.addTransceiver("audio", { direction: "sendrecv" });
+                this.mAudioSender = atransceiver.sender;
+                //this.mAudioSender.setStreams(this.mMediaStream);
+            }
+            
+            if (this.getTransceiverByKind("video") == null) {
+                this.log.L("Add transceiver for video");
+                let vtransceiver = this.mPeer.addTransceiver("video", { direction: "sendrecv" });
+                this.mVideoSender = vtransceiver.sender;
+                //this.mVideoSender.setStreams(this.mMediaStream);
+            }
+            return this.mPeer.createOffer();
+        } else {
+            //we keep this backwards compatible for now for simplicity
+            //this should create 2 transceivers if not yet created and set them to reconly
+            //otherwise addTrack created them already and they are set to sendrecv
+            const offerOptions = { "offerToReceiveAudio": true, "offerToReceiveVideo": true };
+            return this.mPeer.createOffer(offerOptions);
         }
     }
+
+    protected override  CreateAnswerImpl(): Promise<RTCSessionDescriptionInit> {
+        if (this.SINGLE_NEGOTIATION) {
+            //if addTrack or replaceTrack were not used to attach a track we must make sure we 
+            //manually set the direction to sendrecv & buffer the senders to reuse later. 
+            //Otherwise future changes will trigger renegotiation
+            const atransceiver = this.getTransceiverByKind("audio");
+            if (atransceiver !== null) {
+                atransceiver.direction = "sendrecv";
+                this.mAudioSender = atransceiver.sender;
+            }
+            const vtransceiver = this.getTransceiverByKind("video");
+            if (vtransceiver !== null) {
+                vtransceiver.direction = "sendrecv";
+                this.mVideoSender = vtransceiver.sender;
+            }
+        }
+        return this.mPeer.createAnswer();
+    }
+    
+
     protected OnCleanup() {
         super.OnCleanup();
         if (this.mRemoteStream != null) {
@@ -78,32 +137,63 @@ export class MediaPeer extends WebRtcDataPeer
             this.mRemoteStream = null;
         }
     }
-    private OnAddStream(streamEvent: RTCMediaStreamEvent) {
-        this.SetupStream(streamEvent.stream);
-    }
 
-    private OnTrack(ev:RTCTrackEvent){
-
-        if(ev && ev.streams && ev.streams.length > 0)
-        {
-            //this is getting called twice if audio and video is active
-            if(this.mRemoteStream == null)
-                this.SetupStream(ev.streams[0]);
-        }else{
-            SLog.LE("Unexpected RTCTrackEvent: " + JSON.stringify(ev));
-        }
-    }
-
-    private SetupStream(stream:MediaStream)
+    private OnTrack(ev: RTCTrackEvent)
     {
-        this.mRemoteStream = new BrowserMediaStream(stream);
-        //trigger events once the stream has its meta data available
-        this.mRemoteStream.InternalStreamAdded = (stream) =>{
-            if(this.InternalStreamAdded != null)
-            {
-                this.InternalStreamAdded(this, stream);
+        //we stop relying on streams altogether now
+        this.log.L("ontrack: " + ev.track.kind);
+        this.UpdateRemoteStream(ev.track);
+    }
+
+    private UpdateRemoteStream(track:MediaStreamTrack)
+    {
+        if (this.mRemoteStream == null)
+        {
+            this.mRemoteStream = new BrowserMediaStream(false, this.log);
+            
+            //trigger events once the stream has its meta data available
+            this.mRemoteStream.InternalStreamAdded = (stream) =>{
+                if(this.InternalStreamAdded != null)
+                {
+                    this.InternalStreamAdded(this, stream);
+                }
+            };
+        }
+        if (this.SINGLE_NEGOTIATION === false)
+        {
+            //just add the track to the existing stream
+            //HTMLVideoElement should be able to handle this
+            this.mRemoteStream.UpdateTrack(track);
+        } else {
+            //workaround 1:
+            //If we connect a new Peer with video disabled it will already contain a video track
+            //If we add this track immediately then HTMLVideoElement does not playback audio until
+            //the video is being activated (which might never happen).
+            //To ensure audio can play without video we only add tracks once they become active (onunmute) event
+
+            //Workaround 2:
+            //Chrome incorrectly (?) treats the inactive video track as "unmuted" at first
+            //but triggers the correct "muted" event roughly 1 second later
+            //Thus we add the track first, then remove the track again once the mute event triggers,
+            //then we have to reset the video element to ensure audio can start playing without the video track
+
+            //Note these workaround currently depend on the audio track arriving first
+
+            //TODO: These workarounds only work on Firefox and Chrome. Safari shows the track as unmuted and never triggers
+            //a mute event. Audio is not played back
+            this.log.L("delaying track of type: " + track.kind + " muted?" + track.muted + " enabled?" + track.enabled);
+            track.onunmute = () => { 
+                this.log.L("adding unmuted track of type: " + track.kind);
+                this.mRemoteStream.UpdateTrack(track);
             }
-        };
+            track.onmute = () => { 
+                this.log.L("removing muted track of type: " + track.kind);
+                this.mRemoteStream.Stream.removeTrack(track);
+                //this resets the HTMLVideoElemt.srcObject and triggers the stream to reload again without
+                //the track
+                this.mRemoteStream.ResetObject();
+            }
+        }
     }
 
     public TryGetRemoteFrame(): IFrameData
@@ -119,19 +209,69 @@ export class MediaPeer extends WebRtcDataPeer
         return this.mRemoteStream.PeekFrame();
     }
 
-    public AddLocalStream(stream: MediaStream) {
-
-    
-        if(MediaPeer.sUseObsolete) {
-            (this.mPeer as RTCPeerConnectionObsolete).addStream(stream);
+    public async SetLocalStream(stream_container: BrowserMediaStream): Promise<void> {
+        
+        let atrack:MediaStreamTrack = null;
+        let vtrack:MediaStreamTrack = null;
+        if (stream_container !== null) {
+            atrack = stream_container.GetAudioTrack();
+            vtrack = stream_container.GetVideoTrack();
         }
-        else{
-            for(let v of stream.getTracks())
-            {
-                this.mPeer.addTrack(v, stream);
+
+        //TODO: Fully upgrade the transceiver API once firefox supports
+        //setStreams .
+
+        if (atrack != null) {
+            if (this.mAudioSender != null) {
+                //this.mAudioSender.setStreams(stream_container.Stream);
+                await this.mAudioSender.replaceTrack(atrack);
+                //TODO: set the transceiver direction to sendrecv?
+                //Check if this is needed in some cases
+            } else {
+                //no sender yet but a track is suppose to be attached -> create one
+                //this does create a transceiver set to "sendrecv"
+                this.log.L("addinging track of type " + atrack.kind);
+                //ensure stream is attached as older builds depend on this
+                this.mAudioSender = this.mPeer.addTrack(atrack, stream_container.Stream);
+            }
+        } else {
+            //no audio track. Make sure if we have a sender no tracks are attached
+            if (this.mAudioSender != null && this.mAudioSender.track !== null) {
+                this.log.L("setting track of type audio to null");
+                //wait for firefox support of setStreams
+                //this.mAudioSender.setStreams(stream_container.Stream);
+                await this.mAudioSender.replaceTrack(null);
             }
         }
 
+        
+
+        if (vtrack != null) {
+            if (this.mVideoSender != null) {
+                //this.mVideoSender.setStreams(stream_container.Stream);
+                try {
+                    await this.mVideoSender.replaceTrack(vtrack);
+                } catch (err) {
+                    this.log.LE("Error during replaceTrack: " + err);
+                }
+            } else {
+                //no sender yet but a track is suppose to be attached -> create one
+                //this does create a transceiver set to "sendrecv"
+                this.log.L("addinging track of type " + vtrack.kind);
+                //ensure stream is attached as older builds depend on this
+                this.mVideoSender = this.mPeer.addTrack(vtrack, stream_container.Stream);
+            }
+        } else {
+            //no video track. Make sure if we have a sender no old tracks are still attached
+            if (this.mVideoSender != null && this.mVideoSender.track !== null) {
+                this.log.L("setting track of type video to null");
+                //wait for firefox support of setStreams
+                //this.mVideoSender.setStreams(stream_container.Stream);
+                await this.mVideoSender.replaceTrack(null);
+            }
+        }
+        if(this.DEBUG)
+            console.warn("SetLocalStream completed: ", this.mPeer.getTransceivers());
     }
 
     public Update() {
@@ -157,4 +297,5 @@ export class MediaPeer extends WebRtcDataPeer
             return this.mRemoteStream.HasVideoTrack();
         return false;
     }
+    
 }

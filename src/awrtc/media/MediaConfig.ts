@@ -35,7 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /// avoid firewalls.
 /// </summary>
 export class MediaConfig {
-    private mAudio: boolean = true;
+    private mAudio: boolean = false;
     public get Audio(): boolean {
         return this.mAudio;
     }
@@ -43,7 +43,7 @@ export class MediaConfig {
         this.mAudio = value;
     }
 
-    private mVideo: boolean = true;
+    private mVideo: boolean = false;
     public get Video(): boolean {
         return this.mVideo;
     }
@@ -142,5 +142,13 @@ export class MediaConfig {
     }
     public set FrameUpdates(value: boolean) {
         this.mFrameUpdates = value;
+    }
+
+    public clone(): MediaConfig{
+        const config_data = JSON.parse(JSON.stringify(this)) as MediaConfig;
+        return Object.assign(new MediaConfig(), config_data);
+    }
+    public toString(): string{
+        return JSON.stringify(this);
     }
 }

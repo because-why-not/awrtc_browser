@@ -136,11 +136,12 @@ describe("DeviceApiTest", () => {
         let deviceCount = 0;
         const devices_length_unitialized = CAPI_Media_GetVideoDevices_Length();
         expect(devices_length_unitialized).toBe(0);
+
         DeviceApi.AddOnChangedHandler(()=>{
 
             let dev_length = CAPI_Media_GetVideoDevices_Length();
             expect(dev_length).not.toBe(0);
-            expect(dev_length).toBe(Object.keys(DeviceApi.Devices).length);
+            expect(dev_length).toBe(Media.SharedInstance.GetVideoDevices().length);
             
             let keys = Object.keys(DeviceApi.Devices);
             let counter = 0;
@@ -152,7 +153,7 @@ describe("DeviceApiTest", () => {
                 expect(actual).toBe(expectedVal);
                 counter++;
             }
-            done();
+                done();
         });
         CAPI_DeviceApi_Update();
     });

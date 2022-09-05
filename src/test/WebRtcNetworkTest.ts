@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import { WebsocketTest } from "WebsocketNetworkTest";
 import { IBasicNetworkTest } from "helper/IBasicNetworkTest";
 import { NetworkEvent, IBasicNetwork, NetEventType, WebsocketNetwork,
-    ConnectionId, SignalingConfig, LocalNetwork, WebRtcNetwork, IWebRtcNetwork } 
+    ConnectionId, LocalNetwork, WebRtcNetwork, IWebRtcNetwork, NetworkConfig } 
     from "../awrtc/index";
 
 export class WebRtcNetworkTest extends IBasicNetworkTest {
@@ -202,17 +202,18 @@ export class WebRtcNetworkTest extends IBasicNetworkTest {
     }
 
     public _CreateNetworkImpl(): IBasicNetwork {
-        let rtcConfig: RTCConfiguration = { iceServers: [WebRtcNetworkTest.sDefaultIceServer]};
 
-        var sigConfig: SignalingConfig;
+        const config = new NetworkConfig();
+        config.IceServers = [WebRtcNetworkTest.sDefaultIceServer];
+        
 
         if (this.mUseWebsockets) {
-            sigConfig = new SignalingConfig(new WebsocketNetwork(this.mUrl));
+            config.SignalingUrl = this.mUrl
         }
         else {
-            sigConfig = new SignalingConfig(new LocalNetwork());
+            config.SignalingUrl = null;
         }
-        return new WebRtcNetwork(sigConfig, rtcConfig);
+        return new WebRtcNetwork(config);
     }
 
 }

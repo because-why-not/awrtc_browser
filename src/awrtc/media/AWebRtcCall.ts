@@ -31,7 +31,7 @@ import { ICall } from "./ICall";
 import { IMediaNetwork, MediaConfigurationState, MediaEvent } from "./IMediaNetwork";
 import { CallEventHandler, CallAcceptedEventArgs, CallEndedEventArgs, ErrorEventArgs, CallEventType, WaitForIncomingCallEventArgs, CallErrorType, DataMessageEventArgs, FrameUpdateEventArgs, CallEventArgs, MessageEventArgs, MediaUpdatedEventArgs } from "./CallEventArgs";
 import { SLog, Encoding } from "../network/Helper";
-import { NetworkConfig } from "./NetworkConfig";
+import { NetworkConfig } from "../network/NetworkConfig";
 import { MediaConfig } from "./MediaConfig";
 import { ConnectionId, NetworkEvent, NetEventType } from "../network/index";
 import { BrowserMediaNetwork } from "../media_browser/BrowserMediaNetwork";
@@ -204,9 +204,11 @@ export class AWebRtcCall implements ICall {
     
     public Configure(config: MediaConfig): void {
         this.CheckDisposed();
+        /*
         if (this.mState != CallState.Initialized) {
             throw new InvalidOperationException("Method can't be used in state " + this.mState);
         }
+        */
         this.mState = CallState.Configuring;
         SLog.Log("Enter state CallState.Configuring");
         this.mMediaConfig = config;

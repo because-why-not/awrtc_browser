@@ -40,6 +40,7 @@ describe("MediaTest", () => {
 
         const media = new Media();
         let config = new MediaConfig();
+        config.Video = true;
         config.Audio = false;
         let stream = await media.getUserMedia(config);
         expect(stream).not.toBeNull();
@@ -172,8 +173,9 @@ describe("MediaStreamTest", () => {
         public constructor()
         {
             let canvas = document.createElement("canvas");
-            canvas.width = 4;
-            canvas.height = 4;
+            document.body.appendChild(canvas);  
+            canvas.width = 64;
+            canvas.height = 64;
             let ctx = canvas.getContext("2d");
             //make blue for debugging purposes
             ctx.fillStyle = "blue";
@@ -207,14 +209,14 @@ describe("MediaStreamTest", () => {
     
 
     it("buffer_and_trygetframe", async(done) => {
-        
+        BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
         const testcontainer = MakeTestStreamContainer();
-        const stream = new BrowserMediaStream(testcontainer.stream);
+        const stream = new BrowserMediaStream(true);
+        stream.UpdateTrack(testcontainer.stream.getTracks()[0]);
 
         //frames are not available at the start until fully loaded
         let frame = stream.TryGetFrame();
         expect(frame).toBeNull();
-
         await sleep(100);
         stream.Update();
         //waited for the internals to get initialized. We should have a frame now
@@ -223,6 +225,7 @@ describe("MediaStreamTest", () => {
 
         //and a buffer
         let buffer = frame.Buffer;
+        console.log(buffer);
         expect(buffer).not.toBeNull();;
         
         //expected to be blue
@@ -230,10 +233,11 @@ describe("MediaStreamTest", () => {
         let g = buffer[1];
         let b = buffer[2];
         let a = buffer[3];
-        expect(r).toBe(0);
-        expect(g).toBe(0);
-        expect(b).toBe(255);
-        expect(a).toBe(255);
+        //browser might change the color slightly so use less / Greater instead of exact numbers
+        expect(r).toBeLessThan(5);
+        expect(g).toBeLessThan(5);
+        expect(b).toBeGreaterThan(250);
+        expect(a).toBeGreaterThan(250);
 
         //we removed the frame now. this should be null
         
@@ -257,10 +261,10 @@ describe("MediaStreamTest", () => {
         g = buffer[1];
         b = buffer[2];
         a = buffer[3];
-        expect(r).toBe(255);
-        expect(g).toBe(255);
-        expect(b).toBe(0);
-        expect(a).toBe(255);
+        expect(r).toBeGreaterThan(250);
+        expect(g).toBeGreaterThan(250);
+        expect(b).toBeLessThan(5);
+        expect(a).toBeGreaterThan(250);
 
         //done
         done();
@@ -293,7 +297,9 @@ describe("MediaStreamTest", () => {
         
         //blue test container to stream from
         const testcontainer = MakeTestStreamContainer();
-        const stream = new BrowserMediaStream(testcontainer.stream);
+
+        const stream = new BrowserMediaStream(true);
+        stream.UpdateTrack(testcontainer.stream.getTracks()[0]);
         //document.body.appendChild(testcontainer.canvas);
 
         //waited for the internals to get initialized. We should have a frame now

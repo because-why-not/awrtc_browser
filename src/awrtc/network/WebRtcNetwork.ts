@@ -30,9 +30,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //import {ConnectionId, NetworkEvent, NetEventType, IBasicNetwork} from './INetwork'
 import {
-    SignalingInfo, SignalingConfig, WebRtcPeerState, WebRtcDataPeer,
+    SignalingInfo, WebRtcPeerState, WebRtcDataPeer,
     NetworkEvent, NetEventType, ConnectionId, IBasicNetwork}  from "./index"
-import { Queue, SLog, Output } from "./Helper";
+import { Queue, SLogger, Output } from "./Helper";
+import { PeerConfig } from "./WebRtcPeer";
+import { NetworkConfig } from "index";
 
 export enum WebRtcNetworkServerState {
     Invalid,
@@ -51,9 +53,10 @@ export class WebRtcNetwork implements IBasicNetwork {
 
     private mTimeout = 60000;
 
+    
     private mInSignaling: { [id: number]: WebRtcDataPeer } = {}
-    private mNextId: ConnectionId = new ConnectionId(1);
-    private mSignaling: SignalingConfig = null;
+    //private mNextId: ConnectionId = new ConnectionId(1);
+    
     private mEvents: Queue<NetworkEvent> = new Queue<NetworkEvent>();
     private mIdToConnection: { [id: number]: WebRtcDataPeer } = {};
     protected get IdToConnection() {
@@ -67,21 +70,26 @@ export class WebRtcNetwork implements IBasicNetwork {
     }
 
     private mServerState = WebRtcNetworkServerState.Offline;
-    private mRtcConfig: RTCConfiguration;
-    private mSignalingNetwork: IBasicNetwork;
-    private mLogDelegate: (s: string) => void;
-    private mIsDisposed = false;
-
-//just for debugging / testing
-    public SetLog(logDel: (s: string) => void) {
-        this.mLogDelegate = logDel;
+    protected mNetConfig: NetworkConfig
+    public get NetworkConfig() {
+        return this.mNetConfig.Clone();
     }
+    
+    private mSignalingNetwork: IBasicNetwork;
+    
+    protected mIsDisposed = false;
+
+    protected mId: number;
+    private static sNextId = 0;
+    protected log: SLogger;
 
     //public
-    public constructor(signalingConfig: SignalingConfig, lRtcConfig: RTCConfiguration) {
-        this.mSignaling = signalingConfig;
-        this.mSignalingNetwork = this.mSignaling.GetNetwork();
-        this.mRtcConfig = lRtcConfig;
+    public constructor(config: NetworkConfig) {
+        this.mId = WebRtcNetwork.sNextId++;
+        this.log = new SLogger("WebRtcNetwork" + this.mId);
+        this.mNetConfig = config.Clone();
+        this.log.L("Creating using NetworkConfig: " + this.mNetConfig.ToString());
+        this.mSignalingNetwork = this.mNetConfig.GetOrCreateSignalingNetwork();
     }
 
     public StartServer(): void;
@@ -148,7 +156,7 @@ export class WebRtcNetwork implements IBasicNetwork {
             return peer.SendData(data,/* offset, length,*/ reliable);
 
         } else {
-            SLog.LogWarning("unknown connection id");
+            this.log.LW("unknown connection id");
             return false;
         }
     }
@@ -158,7 +166,7 @@ export class WebRtcNetwork implements IBasicNetwork {
             return peer.GetBufferedAmount(reliable);
 
         } else {
-            SLog.LogWarning("unknown connection id");
+            this.log.LW("unknown connection id");
             return -1;
         }
     }
@@ -194,9 +202,10 @@ export class WebRtcNetwork implements IBasicNetwork {
     }
 
 //protected
-    protected CreatePeer(peerId: ConnectionId, rtcConfig: RTCConfiguration): WebRtcDataPeer
+    protected CreatePeer(peerId: ConnectionId): WebRtcDataPeer
     {
-        let peer = new WebRtcDataPeer(peerId, rtcConfig);
+        const peerConfig = new PeerConfig(this.mNetConfig);
+        let peer = new WebRtcDataPeer(peerId, peerConfig, this.log);
         return peer;
     }
 //private
@@ -217,10 +226,15 @@ export class WebRtcNetwork implements IBasicNetwork {
                 this.mSignalingNetwork.SendData(new ConnectionId(+key), buffer, true);
             }
 
-            if (peer.GetState() == WebRtcPeerState.Connected) {
+            //trigger new connection event if the peer newly connected
+            //watch out: peers now can remain in signaling while already being connected
+            if (peer.GetState() == WebRtcPeerState.Connected && !(peer.SignalingInfo.ConnectionId.id in this.mIdToConnection)) {
                 connected.push(peer.SignalingInfo.ConnectionId);
             }
-            else if (peer.GetState() == WebRtcPeerState.SignalingFailed || timeAlive > this.mTimeout) {
+            else if (peer.GetState() == WebRtcPeerState.SignalingFailed) {
+                failed.push(peer.SignalingInfo.ConnectionId);
+            } else if (timeAlive > this.mTimeout && peer.GetState() == WebRtcPeerState.Signaling) {
+                //stuck in signaling forever -> timeout
                 failed.push(peer.SignalingInfo.ConnectionId);
             }
         }
@@ -281,6 +295,15 @@ export class WebRtcNetwork implements IBasicNetwork {
                 let peer = this.mInSignaling[evt.ConnectionId.id];
                 if (peer) {
                     peer.SignalingInfo.SignalingDisconnected();
+
+                    //if mKeepSignaling we treat signaling as part of the connection
+                    //so if signaling fails & there was an active connection we 
+                    //report this as a complete disconnect and cleanup the peer
+                    if (this.mNetConfig.KeepSignalingAlive) {
+                        let connectedPeer = this.mIdToConnection[evt.ConnectionId.id];
+                        if(connectedPeer)
+                            this.HandleDisconnect(evt.ConnectionId);
+                    }
                 }
 
                 //if signaling was completed this isn't a problem
@@ -289,13 +312,14 @@ export class WebRtcNetwork implements IBasicNetwork {
                 //do nothing. either webrtc has enough information to connect already
                 //or it will wait forever for the information -> after 30 sec we give up
             } else if (evt.Type == NetEventType.ReliableMessageReceived) {
-
-                let peer = this.mInSignaling[evt.ConnectionId.id];
+                //TODO: merge mInSignaling & mIdToConnection. Peers can receive signaling messages
+                //even if they are already connected
+                let peer = this.mInSignaling[evt.ConnectionId.id] || this.mIdToConnection[evt.ConnectionId.id];
                 if (peer) {
                     let msg = this.BufferToString(evt.MessageData);
                     peer.AddSignalingMessage(msg);
                 } else {
-                    SLog.LogWarning("Signaling message from unknown connection received");
+                    this.log.L("No peer found for id " + evt.ConnectionId.id + ". Dropped signaling message.");
                 }
             }
         }
@@ -326,18 +350,18 @@ export class WebRtcNetwork implements IBasicNetwork {
     
     private AddOutgoingConnection(address: string): ConnectionId {
         let signalingConId = this.mSignalingNetwork.Connect(address);
-        SLog.L("new outgoing connection");
+        this.log.L("new outgoing connection");
         let info = new SignalingInfo(signalingConId, false, Date.now());
-        let peer = this.CreatePeer(this.NextConnectionId(), this.mRtcConfig);
+        let peer = this.CreatePeer(signalingConId);
         peer.SetSignalingInfo(info);
         this.mInSignaling[signalingConId.id] = peer;
         return peer.ConnectionId;
     }
 
     private AddIncomingConnection(signalingConId: ConnectionId): ConnectionId {
-        SLog.L("new incoming connection");
+        this.log.L("new incoming connection");
         let info = new SignalingInfo(signalingConId, true, Date.now());
-        let peer = this.CreatePeer(this.NextConnectionId(), this.mRtcConfig);
+        let peer = this.CreatePeer(signalingConId);
         peer.SetSignalingInfo(info);
         this.mInSignaling[signalingConId.id] = peer;
         //passive way of starting signaling -> send out random number. if the other one does the same
@@ -349,24 +373,32 @@ export class WebRtcNetwork implements IBasicNetwork {
     private ConnectionEstablished(signalingConId: ConnectionId): void {
         let peer = this.mInSignaling[signalingConId.id];
 
-        delete this.mInSignaling[signalingConId.id];
-        this.mSignalingNetwork.Disconnect(signalingConId);
+        //delete this.mInSignaling[signalingConId.id];
+        //this.mSignalingNetwork.Disconnect(signalingConId);
+        if(this.mNetConfig.KeepSignalingAlive === false)
+            this.RemoveSignalingConnection(signalingConId);
 
         this.mConnectionIds.push(peer.ConnectionId);
         this.mIdToConnection[peer.ConnectionId.id] = peer;
         this.mEvents.Enqueue(new NetworkEvent(NetEventType.NewConnection, peer.ConnectionId, null));
     }
-
-    private SignalingFailed(signalingConId: ConnectionId): void {
+    //removes and disconnects the signaling connection associated with the given id
+    //if the id exists. if not continues without error
+    private RemoveSignalingConnection(signalingConId: ConnectionId) {
         let peer = this.mInSignaling[signalingConId.id];
         if (peer) {
             //connection was still believed to be in signaling -> notify the user of the event
             delete this.mInSignaling[signalingConId.id];
-            this.mEvents.Enqueue(new NetworkEvent(NetEventType.ConnectionFailed, peer.ConnectionId, null));
-
             if (peer.SignalingInfo.IsSignalingConnected()) {
                 this.mSignalingNetwork.Disconnect(signalingConId);
             }
+        }
+    }
+    private SignalingFailed(signalingConId: ConnectionId): void {
+        let peer = this.mInSignaling[signalingConId.id];
+        if (peer) {
+            this.RemoveSignalingConnection(signalingConId);
+            this.mEvents.Enqueue(new NetworkEvent(NetEventType.ConnectionFailed, peer.ConnectionId, null));
             peer.Dispose();
         }
     }
@@ -383,16 +415,19 @@ export class WebRtcNetwork implements IBasicNetwork {
             this.mConnectionIds.splice(index, 1);
             delete this.mIdToConnection[id.id];
         }
+        this.RemoveSignalingConnection(id);
         
         let ev = new NetworkEvent(NetEventType.Disconnected, id, null);
         this.mEvents.Enqueue(ev);
     }
-
+    /*
+    Removed. Peers now use the same id as signaling
     private NextConnectionId(): ConnectionId {
         let id = new ConnectionId(this.mNextId.id);
         this.mNextId.id++;
         return id;
     }
+    */
 
     private StringToBuffer(str: string): Uint8Array {
         let buf = new ArrayBuffer(str.length * 2);

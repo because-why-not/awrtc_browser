@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import * as awrtc from "../awrtc/index"
 import {DefaultValues, GetRandomKey} from "./apphelpers"
-import { DeviceApi, DeviceInfo, BrowserMediaStream } from "../awrtc/index";
+import { DeviceApi, DeviceInfo, BrowserMediaStream, SLog, SLogLevel } from "../awrtc/index";
 
 //This file only contains badly maintained
 //test apps. Use only experimentation. 
@@ -42,14 +42,15 @@ export function CAPI_WebRtcNetwork_testapp() {
 
     var testMessage = "test1234";
 
+    const in_json = '{"IceServers":[{"urls":"stun:stun.l.google.com:19302"}],"SignalingUrl":"ws://signaling.because-why-not.com","IsConference":false,"MaxIceRestart":0,"KeepSignalingAlive":false}';
 
-    //var configuration = "{ \"signaling\" :  { \"class\": \"WebsocketNetwork\", \"param\" : \"ws://localhost:12776\"}, \"iceServers\":[\"stun:stun.l.google.com:19302\"]}";
-    var configuration = "{ \"signaling\" :  { \"class\": \"LocalNetwork\", \"param\" : null}, \"iceServers\":[{\"urls\": \"stun:stun.l.google.com:19302\"}]}";
 
-    var srv = awrtc.CAPI_WebRtcNetwork_Create(configuration);
+    
+
+    var srv = awrtc.CAPI_WebRtcNetwork_Create(in_json);
     awrtc.CAPI_WebRtcNetwork_StartServer(srv, "Room1");
 
-    var clt = awrtc.CAPI_WebRtcNetwork_Create(configuration);
+    var clt = awrtc.CAPI_WebRtcNetwork_Create(in_json);
 
 
     setInterval(() => {
@@ -132,9 +133,14 @@ export function CAPI_WebRtcNetwork_testapp() {
 //for testing the media API used by the unity plugin
 export function CAPI_MediaNetwork_testapp()
 {
+
+    SLog.RequestLogLevel(SLogLevel.Info);
     awrtc.BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
     
-    var signalingUrl : string = DefaultValues.Signaling;
+    var signalingUrl: string = DefaultValues.Signaling;
+    
+    const in_json = '{"IceServers":[{"urls":"stun:stun.l.google.com:19302"}],"SignalingUrl":"' + signalingUrl+'","IsConference":false,"MaxIceRestart":0,"KeepSignalingAlive":false}';
+
     let lIndex = awrtc.CAPI_MediaNetwork_Create("{\"IceUrls\":[\"stun:stun.l.google.com:19302\"], \"SignalingUrl\":\"ws://because-why-not.com:12776\"}");
 
     let configDone = false;

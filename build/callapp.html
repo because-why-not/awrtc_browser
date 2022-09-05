@@ -4,26 +4,109 @@
     <meta charset="utf-8" />
     <title></title>
     <script src="./bundle/apps.js"></script>
+    
+<style>
+.header { grid-area: hd; 
+  background-color: rgba(9, 7, 7, 1.0);
 
+}
+.main { grid-area: ma; 
+  background-color: rgba(9, 7, 7, 1.0);
+  height: 100vh;
+
+}
+.local { grid-area: ma; 
+    
+  width:20%;
+  height:20%;
+  align-self: end; /* bottom of column */
+  justify-self: end; /* right of row */
+  margin:1em;
+  /* background-color: rgba(9, 7, 7, 0);*/
+  background-color: rgba(255, 0, 0, 0);
+}
+.callapp_local_video{
+    width: 100%;
+    height: 100%;
+}
+.callapp_local_video > video{
+    transform: scaleX(-1);
+}
+
+.callapp_remote_video{
+    width: 100%;
+    height: 100%;
+}
+
+.grid-container {
+  display: grid;
+  grid-template-areas:
+    'hd hd hd hd'
+    'ma ma ma ma'
+    'ma ma ma ma'
+    'ma ma ma ma';
+  gap: 5px;
+  background-color: #2d373f;
+  color: #d5d5d5;
+  padding: 10px;
+}
+
+.grid-container > div {
+  padding: 20px 0;
+  font-size: 20px;
+}
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+    </style>
 </head>
 <body>
-    <div id="callapp1">
-        <h1>Callapp1:</h1>
-        URL to connect:
-        <p class="callapp_url">
-    
-        </p>
-        <input type="checkbox" name="audio" class="callapp_send_audio" checked autocomplete="off"> Audio
-        <input type="checkbox" name="video" class="callapp_send_video" checked autocomplete="off"> Video
-        <input type= "text" class="callapp_address" autocomplete="off">
-        <div class="resolution">
-            width: <input type="text" class="callapp_width" size="4" value="1280">  </input>
-             
-            height:<input type="text" class="callapp_height" size="4" value="720"> </input>
+<!-- Quick test for UI
+    <div class="grid-container">
+        <div class="header">Header</div>
+        <div class="main">
+            <video controls>
+                <source src="https://www.w3schools.com/html/movie.mp4" type="video/mp4">
+                <source src="https://www.w3schools.com/html/movie.ogg" type="video/ogg">
+              Your browser does not support the video tag.
+              </video>
+        </div>  
+        <div class="local">local 
+            <video controls>
+                <source src="https://www.w3schools.com/html/movie.mp4" type="video/mp4">
+                <source src="https://www.w3schools.com/html/movie.ogg" type="video/ogg">
+              Your browser does not support the video tag.
+              </video>
         </div>
-        <button class="callapp_button"> Join </button>
-        <div class="callapp_local_video">local video</div>
-        <div class="callapp_remote_video">remote video</div>
+    </div>
+-->
+    <div id="callapp1" class="grid-container">
+        <div class="header">
+            <h1>Callapp1:</h1>
+            URL to connect:
+            <p class="callapp_url">
+        
+            </p>
+            <input type="checkbox" name="audio" class="callapp_send_audio" checked autocomplete="off"> Audio
+            <input type="checkbox" name="video" class="callapp_send_video" checked autocomplete="off"> Video
+            <select name="video_devices" class="video_devices" >
+            </select>
+            <input type= "text" class="callapp_address" autocomplete="off">
+            <div class="resolution">
+                width: <input type="text" class="callapp_width" size="4" value="1280">  </input>
+                
+                height:<input type="text" class="callapp_height" size="4" value="720"> </input>
+            </div>
+            <button class="callapp_button"> Join </button>
+        </div>
+        <div class="main">
+            <div class="callapp_remote_video"></div>
+        </div>
+        <div class="local">
+            <div class="callapp_local_video"></div>
+        </div>
     </div>
 <!--
     <div id="callapp2">
@@ -34,8 +117,15 @@
         </p>
         <input type="checkbox" name="audio" class="callapp_send_audio" checked autocomplete="off"> Audio
         <input type="checkbox" name="video" class="callapp_send_video" checked autocomplete="off"> Video
+        <select name="video_devices" class="video_devices" >
+        </select>
         <input type= "text" class="callapp_address" autocomplete="off">
-        <button class="callapp_button"> Start / Stop </button>
+        <div class="resolution">
+            width: <input type="text" class="callapp_width" size="4" value="1280">  </input>
+             
+            height:<input type="text" class="callapp_height" size="4" value="720"> </input>
+        </div>
+        <button class="callapp_button"> Join </button>
         <div class="callapp_local_video">local video</div>
         <div class="callapp_remote_video">remote video</div>
     </div>
@@ -45,7 +135,12 @@
     <script> 
 
         apps.callapp(document.querySelector("#callapp1"));
-        //apps.callapp(document.querySelector("#callapp2"));
+        const callapp2 = document.querySelector("#callapp1").cloneNode(true);
+        callapp2.id = "callapp2";
+        
+        callapp2.querySelector("h1").innerText = "Callapp2";
+        document.body.appendChild(callapp2);
+        apps.callapp(callapp2);
 
     </script>
 </body>

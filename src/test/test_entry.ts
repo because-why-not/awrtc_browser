@@ -36,4 +36,5 @@ export * from "./BrowserApiTest"
 export * from "./DeviceApiTest"
 export * from "./VideoInputTest"
 export * from "./MediaTest"
+export * from "./CAPITest"
 

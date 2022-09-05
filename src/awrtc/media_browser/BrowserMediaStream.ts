@@ -28,7 +28,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { IFrameData, RawFrame, LazyFrame } from "../media/RawFrame";
-import { SLog } from "../network/Helper";
+import { SLog, SLogger } from "../network/Helper";
 
 
 /**
@@ -46,7 +46,7 @@ enum FrameEventMethod{
      * Using the tracks meta data to decide the framerate. We might drop frames or deliver them twice
      * because we can't tell when exactly they are updated.
      * Some video devices also claim 30 FPS but generate less causing us to waste performance copying the same image
-     * multipel times
+     * multiple times
      * 
      * This system works with local video in firefox
      */
@@ -86,9 +86,11 @@ export class BrowserMediaStream {
     public get Stream() {
         return this.mStream;
     }
+    private mLocal: boolean;
     private mBufferedFrame: IFrameData = null;
 
     private mInstanceId = 0;
+    private mIdentity: string = "Stream";
 
     private mVideoElement: HTMLVideoElement;
     public get VideoElement() {
@@ -120,6 +122,8 @@ export class BrowserMediaStream {
 
     private mHasVideo: boolean = false;
 
+    private log: SLogger;
+
     public InternalStreamAdded: (stream: BrowserMediaStream) => void = null;
 
     private static sBlockedStreams : Set<BrowserMediaStream> = new Set();
@@ -139,7 +143,7 @@ export class BrowserMediaStream {
         
         if(BrowserMediaStream.MUTE_IF_AUTOPLAT_BLOCKED)
         {
-            SLog.L("Try to replay video with audio. " );
+            this.log.L("Try to replay video with audio. " );
             //if muted due to autoplay -> unmute
             this.SetVolume(this.mDefaultVolume);
 
@@ -155,10 +159,13 @@ export class BrowserMediaStream {
     }
 
 
-    constructor(stream: MediaStream) {
-        this.mStream = stream;
+    constructor(isLocal: boolean, baseLogger: SLogger = new SLogger("")) {
+
+        this.mStream = new MediaStream();
+        this.mLocal = isLocal;
         this.mInstanceId = BrowserMediaStream.sNextInstanceId;
         BrowserMediaStream.sNextInstanceId++;
+        this.log = baseLogger.CreateSub(this.mIdentity + this.mInstanceId);
 
         this.mMsPerFrame = 1.0 / BrowserMediaStream.DEFAULT_FRAMERATE * 1000;
         this.mFrameEventMethod = FrameEventMethod.DEFAULT_FALLBACK;
@@ -166,6 +173,45 @@ export class BrowserMediaStream {
 
         this.SetupElements();
     }
+
+    /**Adds or replaces a track with a new track of the same kind
+     * 
+     * @param new_track Track to add / replace the current track with
+     */
+    public UpdateTrack(new_track: MediaStreamTrack) {
+        
+        //make sure we only have 1 track each
+        this.mStream.getTracks().forEach((track) => {
+            if (track.kind == new_track.kind)
+            {
+                this.log.L("Replacing track of type " + track.kind);
+                this.mStream.removeTrack(track);
+            }
+        });
+        
+        //this.log.L("Adding new track of type " + new_track.kind + " muted?" + new_track.muted + " enabled?" + new_track.enabled);
+        this.mStream.addTrack(new_track);
+    }
+
+    /**Removes a track from the Stream.
+     * 
+     * @param track track to remove
+     */
+    public RemoveTrack(track: MediaStreamTrack) {
+        return;
+        this.log.L("Removing track of type " + track.kind + " muted?" + track.muted + " enabled?" + track.enabled);
+        this.mStream.removeTrack(track);
+    }
+    /**
+     * This resets the srcObject property of the VideoElement. 
+     * Used to force a clean reload after removing a track
+     * (Chrome single negotiation workaround)
+     */
+    public ResetObject() {
+        this.mVideoElement.srcObject = this.mStream;
+    }
+
+
     private CheckFrameRate():void
     {
         if(this.mVideoElement)
@@ -180,7 +226,7 @@ export class BrowserMediaStream {
                 {
                     if(BrowserMediaStream.VERBOSE)
                     {
-                        console.log("Track FPS: " + fps);
+                        this.log.LV("Track FPS: " + fps);
                     }
                     this.mMsPerFrame = 1.0 / fps * 1000;
                     this.mFrameEventMethod = FrameEventMethod.TRACK;
@@ -193,7 +239,7 @@ export class BrowserMediaStream {
             {
                 if(BrowserMediaStream.VERBOSE)
                 {
-                    console.log("Get frame available.");
+                    this.log.LV("Get frame available.");
                 }
                 //browser returns exact frame information
                 this.mFrameEventMethod = FrameEventMethod.EXACT;
@@ -204,7 +250,7 @@ export class BrowserMediaStream {
             if(this.mFrameEventMethod === FrameEventMethod.DEFAULT_FALLBACK)
             {
                 //firefox and co won't tell us the FPS for remote stream
-                SLog.LW("Framerate unknown for stream " + this.mInstanceId + ". Using default framerate of " + BrowserMediaStream.DEFAULT_FRAMERATE);
+                this.log.LW("Framerate unknown for stream " + this.mInstanceId + ". Using default framerate of " + BrowserMediaStream.DEFAULT_FRAMERATE);
             }
         }
     }
@@ -240,7 +286,7 @@ export class BrowserMediaStream {
                     //keep MUTE_IF_AUTOPLAT_BLOCKED === false for iOS support
                     
                     console.warn(error);
-                    SLog.LW("Replay of video failed. The browser might have blocked the video due to autoplay restrictions. Retrying without audio ...");
+                    this.log.LW("Replay of video failed. The browser might have blocked the video due to autoplay restrictions. Retrying without audio ...");
                     
                     //try to play without audio enabled
                     this.SetVolume(0);
@@ -249,11 +295,11 @@ export class BrowserMediaStream {
 
                     if(typeof promise2 !== "undefined"){
                         promise2.then(()=>{
-                            SLog.L("Playing video successful but muted.");
+                            this.log.L("Playing video successful but muted.");
                             //still trigger for unmute on next click
                             this.TriggerAutoplayBlockled();
                         }).catch((error)=>{
-                            SLog.LE("Replay of video failed. This error is likely caused due to autoplay restrictions of the browser. Try allowing autoplay.");
+                            this.log.LE("Replay of video failed. This error is likely caused due to autoplay restrictions of the browser. Try allowing autoplay.");
                             console.error(error);
                             this.TriggerAutoplayBlockled();
                         });
@@ -271,12 +317,14 @@ export class BrowserMediaStream {
         //bug in firefox or might be related to a device / driver error
         //So far it only happens randomly (maybe 1 in 10 tries) on a single test device and only
         //with 720p. (video device "BisonCam, NB Pro" on MSI laptop)
-        SLog.L("video element created. video tracks: " + this.mStream.getVideoTracks().length);
+        this.log.L("video element created. video tracks: " + this.mStream.getVideoTracks().length + " audio:" +this.mStream.getAudioTracks().length);
         this.mVideoElement.onloadedmetadata = (e) => {
-            //console.log("onloadedmetadata");
             //we might have shutdown everything by now already
-            if(this.mVideoElement == null)
+            if (this.mVideoElement == null)
+            {
+                this.log.L("Stream destroyed by the time onloadedmetadata triggered. Skip event.");
                 return;
+            }
 
             this.TryPlay();
 
@@ -284,13 +332,13 @@ export class BrowserMediaStream {
                 this.InternalStreamAdded(this);
 
             this.CheckFrameRate();
-            
-            let video_log = "Resolution: " + this.mVideoElement.videoWidth + "x" + this.mVideoElement.videoHeight 
+            let source = "remote";
+            if (this.mLocal)
+                source = "local";
+            let video_log = "onloadedmetadata: " + source + " audio: " + (this.mStream.getAudioTracks().length > 0) + " Resolution: " + this.mVideoElement.videoWidth + "x" + this.mVideoElement.videoHeight 
                 + " fps method: " + this.mFrameEventMethod + " " + Math.round(1000/(this.mMsPerFrame));
-            SLog.L(video_log);
-            if(BrowserMediaStream.VERBOSE){
-                console.log(video_log)
-            }
+            this.log.L(video_log);
+            
             //now create canvas after the meta data of the video are known
             if (this.mHasVideo) {
                 this.mCanvasElement = this.SetupCanvas();
@@ -312,7 +360,7 @@ export class BrowserMediaStream {
         catch (error)
         {
             //old way of doing it. won't work anymore in firefox and possibly other browsers
-            this.mVideoElement.src = window.URL.createObjectURL(this.mStream);
+            this.mVideoElement.src = window.URL.createObjectURL(this.mStream as any);
         }
     }
 
@@ -435,22 +483,17 @@ export class BrowserMediaStream {
             this.mCanvasElement.parentElement.removeChild(this.mCanvasElement);
         }
     }
-    public Dispose(): void {
 
+    
+    public Dispose(): void {
+        this.log.L("Disposing stream " + this.mInstanceId);
         this.mIsActive = false;
         BrowserMediaStream.sBlockedStreams.delete(this);
         this.DestroyCanvas();
         if (this.mVideoElement != null && this.mVideoElement.parentElement != null) {
             this.mVideoElement.parentElement.removeChild(this.mVideoElement);
         }
-
-        //track cleanup is probably not needed but
-        //it might help ensure it properly stops
-        //in case there are other references out there
-        var tracks = this.mStream.getTracks();
-        for (var i = 0; i < tracks.length; i++) {
-            tracks[i].stop();
-        }
+        this.mStream.getTracks().forEach((x) => { x.stop(); });
         
         this.mStream = null;
         this.mVideoElement = null;
@@ -496,7 +539,7 @@ export class BrowserMediaStream {
             // * Recreate the canvas if the exception is triggered. During the next few frames firefox should get its flag right
             //   and then stop causing the error. It might recreate the canvas multiple times until it finally works as we
             //   can't detect if the video element will trigger the issue until we tried to access the data
-            SLog.LogWarning("Firefox workaround: Refused access to the remote video buffer. Retrying next frame...");
+            this.log.LW("Firefox workaround: Refused access to the remote video buffer. Retrying next frame...");
             this.DestroyCanvas();
             this.mCanvasElement = this.SetupCanvas();
             return res;
@@ -517,7 +560,7 @@ export class BrowserMediaStream {
         delta = Math.min(this.mMsPerFrame, Math.max(1, delta))
         this.mLastFrameTime = now;
         this.mNextFrameTime = now + delta;
-        //console.log("last frame , new frame", this.mLastFrameTime, this.mNextFrameTime, delta);
+        //this.log.LV("last frame , new frame", this.mLastFrameTime, this.mNextFrameTime, delta);
         this.mBufferedFrame = new LazyFrame(this);
     }
 
@@ -530,11 +573,12 @@ export class BrowserMediaStream {
         //width/doesn't seem to be important
         videoElement.width = 320;
         videoElement.height = 240;
-        videoElement.controls = true;
+        if(this.mLocal == false)
+            videoElement.controls = true;
+        //needed for Safari on iPhone
         videoElement.setAttribute("playsinline", "");
         videoElement.id = "awrtc_mediastream_video_" + this.mInstanceId;
-
-        //videoElement.muted = true;
+        
         if (BrowserMediaStream.DEBUG_SHOW_ELEMENTS)
             document.body.appendChild(videoElement);
 
@@ -568,6 +612,9 @@ export class BrowserMediaStream {
         this.mVideoElement.volume = volume;
     }
 
+    /**
+     * @returns true if a audio track is attached to the stream, false if not
+     */
     public HasAudioTrack(): boolean {
         if (this.mStream != null && this.mStream.getAudioTracks() != null
             && this.mStream.getAudioTracks().length > 0) {
@@ -575,6 +622,9 @@ export class BrowserMediaStream {
         }
         return false;
     }
+    /**
+     * @returns true if a video track is attached to the stream, false it not
+     */
     public HasVideoTrack(): boolean {
         if (this.mStream != null && this.mStream.getVideoTracks() != null
             && this.mStream.getVideoTracks().length > 0) {
@@ -583,5 +633,22 @@ export class BrowserMediaStream {
         return false;
     }
 
-    //for debugging purposes this is in here
+    /**
+     * 
+     * @returns the used audio track or null if none
+     */
+    public GetAudioTrack(): MediaStreamTrack{
+        if (this.mStream.getAudioTracks().length > 0)
+            return this.mStream.getAudioTracks()[0];
+        return null;
+    }
+    /**
+     * @returns the used video track or null if none
+     */
+    public GetVideoTrack(): MediaStreamTrack{
+        if (this.mStream.getVideoTracks().length > 0)
+            return this.mStream.getVideoTracks()[0];
+        return null;
+    }
+    
 }
