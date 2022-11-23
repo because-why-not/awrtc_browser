@@ -1,4 +1,5 @@
 import * as awrtc from "../awrtc/index"
+import { WebRtcHelper } from "../awrtc/index";
 
 /**
  * Copy of the CallApp to test custom video input
@@ -355,6 +356,7 @@ export class VideoInputApp {
 
 
 export function videoinputapp(parent: HTMLElement, canvas: HTMLCanvasElement) {
+    WebRtcHelper.EmitAdapter();
     let callApp: VideoInputApp;
     console.log("init callapp");
     if (parent == null) {

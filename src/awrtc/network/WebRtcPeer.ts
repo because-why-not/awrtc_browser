@@ -298,9 +298,11 @@ export abstract class AWebRtcPeer {
         try{
             let promise = this.mPeer.addIceCandidate(ice);
             promise.then(() => {/*success*/ });
-            promise.catch((error: any) => { this.log.LE(error); });
+            promise.catch((error: any) => {
+                this.log.LW("Error during promise addIceCandidate: " + error + "! ice candidate ignored: " + JSON.stringify(ice));
+            });
         }catch(error){
-            this.log.LE(error);
+            this.log.LW("Error during call to addIceCandidate: " + error + "! ice candidate ignored: " + JSON.stringify(ice));
         }
     }
 

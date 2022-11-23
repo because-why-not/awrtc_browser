@@ -32,6 +32,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
 
+export class WebRtcHelper{
+    private static sAdapterActive = false;
+    //declare function require(moduleName: string)
+    public static EmitAdapter() : void {
+        
+        if (WebRtcHelper.sAdapterActive == false) {
+            console.debug("loading webrtc-adapter");
+            let adapter  = require("webrtc-adapter");
+            WebRtcHelper.sAdapterActive = true;
+        }
+    }
+}
+
 export class Queue<T> {
     private mArr: Array<T> = new Array<T>();
     constructor() {
@@ -213,10 +226,11 @@ export class Helper {
 }
 export enum SLogLevel
 {
-    None = 0,
-    Errors = 1,
+    Verbose = 0,
+    Info = 1,
     Warnings = 2,
-    Info = 3
+    Errors = 3,
+    None = 4
 }
 //Simplified logger
 export class SLog {
@@ -226,6 +240,7 @@ export class SLog {
     public static SetLogLevel(level: SLogLevel)
     {
         SLog.sLogLevel = level;
+        SLog.L("Log level set to: " + level);
     }
     public static RequestLogLevel(level: SLogLevel)
     {
@@ -245,7 +260,7 @@ export class SLog {
     }
     public static Log(msg: any, tag?:string): void {
         
-        if(SLog.sLogLevel >= SLogLevel.Info)
+        if(SLog.sLogLevel <= SLogLevel.Info)
         {
             if(tag)
             {
@@ -258,7 +273,7 @@ export class SLog {
     public static LogWarning(msg: any, tag?:string): void {
         if(!tag)
             tag = "";
-        if(SLog.sLogLevel >= SLogLevel.Warnings)
+        if(SLog.sLogLevel <= SLogLevel.Warnings)
         {
             if(tag)
             {
@@ -271,7 +286,7 @@ export class SLog {
 
     public static LogError(msg: any, tag?:string) {
         
-        if(SLog.sLogLevel >= SLogLevel.Errors)
+        if(SLog.sLogLevel <= SLogLevel.Errors)
         {
             if(tag)
             {

@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import * as awrtc from "../awrtc/index"
 import {DefaultValues, GetRandomKey} from "./apphelpers"
-import { DeviceApi, DeviceInfo, BrowserMediaStream, SLog, SLogLevel } from "../awrtc/index";
+import { DeviceApi, DeviceInfo, BrowserMediaStream, SLog, SLogLevel, WebRtcHelper } from "../awrtc/index";
 
 //This file only contains badly maintained
 //test apps. Use only experimentation. 
@@ -38,6 +38,8 @@ import { DeviceApi, DeviceInfo, BrowserMediaStream, SLog, SLogLevel } from "../a
 //testapp to run a full connection test using the CAPI
 //which is used by the unity WebGL plugin
 export function CAPI_WebRtcNetwork_testapp() {
+
+    WebRtcHelper.EmitAdapter();
     console.log("test1");
 
     var testMessage = "test1234";
@@ -133,6 +135,7 @@ export function CAPI_WebRtcNetwork_testapp() {
 //for testing the media API used by the unity plugin
 export function CAPI_MediaNetwork_testapp()
 {
+    WebRtcHelper.EmitAdapter();
 
     SLog.RequestLogLevel(SLogLevel.Info);
     awrtc.BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
@@ -176,6 +179,7 @@ export function CAPI_MediaNetwork_testapp()
 
 //Tests shared address feature of the WebsocketNetwork
 export function WebsocketNetwork_sharedaddress() {
+    WebRtcHelper.EmitAdapter();
     console.log("WebsocketNetwork shared address test");
 
     var testMessage = "test1234";
@@ -270,6 +274,7 @@ export function WebsocketNetwork_sharedaddress() {
 
 export function WebsocketNetwork_test1() 
 {
+    WebRtcHelper.EmitAdapter();
     var testMessage = "test1234";
 
     
@@ -348,6 +353,7 @@ export function WebsocketNetwork_test1()
 }
 
 export function BrowserMediaNetwork_TestLocalCamera() {
+    WebRtcHelper.EmitAdapter();
     //first get the device names
     let handler : awrtc.DeviceApiOnChanged;
     handler = ()=>{
@@ -359,6 +365,7 @@ export function BrowserMediaNetwork_TestLocalCamera() {
 }
 function BrowserMediaNetwork_TestLocalCameraInternal() {
 
+    WebRtcHelper.EmitAdapter();
     awrtc.BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
     let networkConfig = new awrtc.NetworkConfig();
     networkConfig.SignalingUrl = null;
@@ -431,6 +438,7 @@ export function BrowserMediaNetwork_frameaccess() {
 
     //BrowserMediaStream.DEFAULT_FRAMERATE = 60;
     //awrtc.BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
+    WebRtcHelper.EmitAdapter();
 
     let address = GetRandomKey();
     let networkConfig = new awrtc.NetworkConfig();

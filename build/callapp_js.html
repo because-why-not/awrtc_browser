@@ -297,6 +297,7 @@ class CallApp {
 }
 function callapp(parent) {
     let callApp;
+    awrtc.WebRtcHelper.EmitAdapter();
     console.log("init callapp");
     if (parent == null) {
         console.log("parent was null");

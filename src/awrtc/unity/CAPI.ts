@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /**This file contains the mapping between the awrtc_browser library and
  * Unitys WebGL support. Not needed for regular use.
  */
-import { SLog, WebRtcNetwork, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork, NetworkConfig, SLogger } from "../network/index"
+import { SLog, WebRtcNetwork, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork, NetworkConfig, SLogger, WebRtcHelper } from "../network/index"
 import { MediaConfigurationState, MediaConfig } from "../media/index";
 import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media, VideoInputType } from "../media_browser/index";
 
@@ -57,7 +57,7 @@ var gCAPI_Canvas: HTMLCanvasElement = null;
 
 
 
-export function CAPI_InitAsync(initmode, glctx) {
+export function CAPI_InitAsync(initmode, glctx, useAdapter) {
     console.debug("CAPI_InitAsync mode: " + initmode);
     gCAPI_InitState = CAPI_InitState.Initializing;
 
@@ -65,6 +65,9 @@ export function CAPI_InitAsync(initmode, glctx) {
     if (glctx && glctx.canvas) {
         gCAPI_Canvas = glctx.canvas as HTMLCanvasElement;
     }
+    
+    if(useAdapter)
+        WebRtcHelper.EmitAdapter();
     InitAutoplayWorkaround();
 
     let hasDevApi = DeviceApi.IsApiAvailable();
@@ -117,13 +120,9 @@ export function CAPI_PollInitState() {
 /**
  * 
  * @param loglevel 
- * None = 0,
- * Errors = 1,
- * Warnings = 2,
- * Verbose = 3
  */
 export function CAPI_SLog_SetLogLevel(loglevel: number) {
-    if (loglevel < 0 || loglevel > 3) {
+    if (loglevel < 0 || loglevel > 4) {
         SLog.LogError("Invalid log level " + loglevel);
         return;
     }
@@ -386,12 +385,22 @@ export function CAPI_MediaNetwork_GetConfigurationState(lIndex: number): number 
     return mediaNetwork.GetConfigurationState() as number;
 }
 
+export function CAPI_MediaNetwork_GetConfigurationError_Length(lIndex){
+    const mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
+    const err = mediaNetwork.GetConfigurationError();
+    if(err == null){
+        return 0;
+    }
+    return err.length;
+}
 //Note: not yet glued to the C# version!
 //GetConfigurationError(): string;
 export function CAPI_MediaNetwork_GetConfigurationError(lIndex: number): string {
-    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
-    return mediaNetwork.GetConfigurationError();
-
+    const mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
+    const err = mediaNetwork.GetConfigurationError();
+    if(err == null)
+        return "";
+    return err;
 }
 
 //ResetConfiguration(): void;

@@ -28,13 +28,13 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+
 console.debug("loading awrtc modules ...");
 //this should trigger webpack to include
 //the webrtc adapter.js. It changes the 
 //global WebRTC calls and adds backwards
 //and browser compatibility.
-declare function require(moduleName: string)
-let adapter  = require("webrtc-adapter");
+
 
 export * from "./network/index"
 export * from "./media/index"

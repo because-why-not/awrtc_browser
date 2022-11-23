@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 import * as awrtc from "../awrtc/index"
-import { DeviceApi, Media, MediaConfig } from "../awrtc/index";
+import { DeviceApi, Media, MediaConfig, WebRtcHelper } from "../awrtc/index";
 
 /**
  * Main (and most complicated) example for using BrowserWebRtcCall.
@@ -571,6 +571,7 @@ export class CallApp
 export function callapp(parent: HTMLElement)
 {
 
+    WebRtcHelper.EmitAdapter();
     let callApp : CallApp;
     console.log("init callapp");
     if(parent == null)

@@ -79,6 +79,19 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
         this.mConfigurationState = MediaConfigurationState.NoConfiguration;
     }
 
+    /** Returns MediaStream or fails with exception
+     * 
+     */
+    private async GetMedia(config: MediaConfig): Promise<MediaStream>{ 
+        if(DeviceApi.IsUserMediaAvailable() == false){
+            let error = "Configuration failed. navigator.mediaDevices is undefined. The browser might not allow media access." +
+            "Is the page loaded via http or file URL? Some browsers only support media access via https!";
+            throw error;
+        }
+        
+        let stream = await Media.SharedInstance.getUserMedia(config);
+        return stream;
+    }
 
     /**Triggers the creation of a local audio and video track. After this
      * call the user might get a request to allow access to the requested 
@@ -106,42 +119,23 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
 
         if (config.Audio || config.Video) {
             SLog.L("calling GetUserMedia. Media config: " + JSON.stringify(config));
-            if(DeviceApi.IsUserMediaAvailable())
-            {
-                let promise : Promise<MediaStream> = null;
-                promise = Media.SharedInstance.getUserMedia(config);
-                
-                promise.then((stream) => { 
-                    //exit if the user has shut down the call without pressing allow / deny button
-                    if (this.mIsDisposed)
-                        return;
-                    
 
-                    //user gave permission
-                    //call worked -> setup a frame buffer that deals with the rest
+            setTimeout(async ()=>{
+                try
+                {
+                    let stream = await this.GetMedia(config);
+                    if(this.mIsDisposed)
+                        return;
                     this.mLocalStream = new BrowserMediaStream(true, this.log);
                     stream.getTracks().forEach((x) => { this.mLocalStream.UpdateTrack(x);});
                     //ensure local audio is not replayed
                     this.mLocalStream.SetMute(true);
-                    
                     this.OnLocalStreamUpdated();
-
                     this.OnConfigurationSuccess();
-
-
-                });
-                promise.catch((err)=> {
-                        //failed due to an error or user didn't give permissions
-                        SLog.LE(err.name + ": " + err.message);
-                        this.OnConfigurationFailed(err.message);
-                    });
-            }else{
-                //no access to media device -> fail
-                let error = "Configuration failed. navigator.mediaDevices is undefined. The browser might not allow media access." +
-                "Is the page loaded via http or file URL? Some browsers only support media access via https!";
-                SLog.LE(error);
-                this.OnConfigurationFailed(error);
-            }
+                }catch(error){
+                    this.OnConfigurationFailed("Accessing media failed due to exception: " + error);
+                }
+            }, 0);
         } else {
             this.OnLocalStreamUpdated();
             this.OnConfigurationSuccess();
