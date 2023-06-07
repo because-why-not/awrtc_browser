@@ -5,9 +5,28 @@ Run the following commands in the project root directory:
 * npm install
 * npm run build
 
-Now you should have the final build in the ./build/bundle directory. You can test it using the test applications:
-* ./build/callapp.html for the typescrypt example using ./build/bundle/apps.js (contains the merged source code from ./src/apps and ./src/awrtc )
+Now you should have the final build in the ./build/bundle directory.
+
+You can test it using the test applications (see callapp.ts):
+* ./build/callapp.html for the typescrypt example using ./build/bundle/apps.js (contains the merged source code from ./src/apps and ./src/awrtc)
 * ./build/callapp_js.html for javascript example that runs the same app but as javascript within the html file so you can easily change the code and experiment. It is using the library only bundle from ./build/bundle/awrtc.js (source code at ./src/awrtc)
+
+# Configuration
+
+If you want to connect awrtc_browser to compatible software make sure the NetworkConfig class contains the same values.
+For example the callapp.ts uses these:
+```
+this.mNetConfig.IceServers = [ 
+    {urls: "stun:t.y-not.app:443"},
+    //{urls: "turn:t.y-not.app:443", username: "user", credential:"pass"},
+    {urls: "stun:stun.l.google.com:19302"}
+];
+this.mNetConfig.IsConference = false;
+this.mNetConfig.SignalingUrl = "wss://s.y-not.app/callapp";
+```
+Note by default no TURN server is used. If you need a more reliable connection through NAT's and firewalls add your own turn server to the IceServers list above.
+See [server side tutorial](https://www.because-why-not.com/webrtc/tutorials-server-side/) for more information. 
+If you purchased WebRTC Video Chat you can also find a free TURN server in your Unity examples (for testing purposes only). 
 
 # Using awrtc_browser to customize WebRTC Video Chat
 
