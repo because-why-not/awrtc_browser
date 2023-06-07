@@ -39,7 +39,7 @@ export class CallTestHelper
     static CreateCall(video:boolean, audio: boolean) : ICall {
 
         var nconfig = new NetworkConfig();
-        nconfig.SignalingUrl = "wss://signaling.because-why-not.com:443/test";
+        nconfig.SignalingUrl = "wss://s.y-not.app:443/test";
         
         var call = new BrowserWebRtcCall(nconfig);
 

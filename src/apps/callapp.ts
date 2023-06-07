@@ -66,11 +66,13 @@ export class CallApp
     public constructor()
     {
         this.mNetConfig.IceServers = [ 
-            {urls: "stun:stun.because-why-not.com:443"},
+            {urls: "stun:t.y-not.app:443"},
             {urls: "stun:stun.l.google.com:19302"}
         ];
         this.mNetConfig.IsConference = false;
-        this.mNetConfig.SignalingUrl = "wss://signaling.because-why-not.com/callapp";
+        this.mNetConfig.SignalingUrl = "wss://s.y-not.app/callapp";
+        //uncommenting this will make the callapp incompatible to the default configuration!
+        //(new connection will immediately disconnect again after being established)
         //this.mNetConfig.KeepSignalingAlive = true;
         //this.mNetConfig.MaxIceRestart = 2;
     }

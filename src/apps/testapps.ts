@@ -44,7 +44,7 @@ export function CAPI_WebRtcNetwork_testapp() {
 
     var testMessage = "test1234";
 
-    const in_json = '{"IceServers":[{"urls":"stun:stun.l.google.com:19302"}],"SignalingUrl":"ws://signaling.because-why-not.com","IsConference":false,"MaxIceRestart":0,"KeepSignalingAlive":false}';
+    const in_json = '{"IceServers":[{"urls":"stun:stun.l.google.com:19302"}],"SignalingUrl":"wss://s.y-not.app/test","IsConference":false,"MaxIceRestart":0,"KeepSignalingAlive":false}';
 
 
     

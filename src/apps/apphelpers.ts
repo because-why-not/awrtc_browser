@@ -27,7 +27,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-import * as awrtc from "../awrtc";
+
 
 /**
  * Contains default values / servers used for example and test apps.
@@ -37,18 +37,13 @@ import * as awrtc from "../awrtc";
  */
 export class DefaultValues
 {
-    private static SignalingUrl= "ws://signaling.because-why-not.com";
-    private static SecureSignalingUrl= "wss://signaling.because-why-not.com";
+    //private static SignalingUrl= "ws://signaling.because-why-not.com";
+    private static SecureSignalingUrl= "wss://s.y-not.app";
 
 
     private static get SignalingBase():string
     {
-        if (window.location.protocol != "https:") {
-             return DefaultValues.SignalingUrl;
-        } else
-        {
-            return DefaultValues.SecureSignalingUrl;
-        }
+        return DefaultValues.SecureSignalingUrl;
     }
     /**
      * Returns the signaling server URL using ws for http pages and 

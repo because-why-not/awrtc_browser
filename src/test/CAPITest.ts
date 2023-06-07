@@ -17,7 +17,7 @@ describe("CAPITest", () => {
 
     it("CAPI_WebRtcNetwork_Create", () => {
 
-        const in_json = '{"IceServers":[{"urls":["turn.y-not.app:12345"],"credential":"testpass","username":"testuser"}],"SignalingUrl":"ws://signaling.because-why-not.com","IsConference":true,"MaxIceRestart":2,"KeepSignalingAlive":true}';
+        const in_json = '{"IceServers":[{"urls":["turn.y-not.app:12345"],"credential":"testpass","username":"testuser"}],"SignalingUrl":"ws://s.y-not.app","IsConference":true,"MaxIceRestart":2,"KeepSignalingAlive":true}';
 
         let lIndex = CAPI_WebRtcNetwork_Create(in_json);
         expect(lIndex).toBeGreaterThan(-1);
@@ -41,7 +41,7 @@ describe("CAPITest", () => {
     });
     it("CAPI_MediaNetwork_Create", () => {
 
-        const in_json = '{"IceServers":[{"urls":["turn.y-not.app:12345"],"credential":"testpass","username":"testuser"}],"SignalingUrl":"ws://signaling.because-why-not.com","IsConference":true,"MaxIceRestart":2,"KeepSignalingAlive":true}';
+        const in_json = '{"IceServers":[{"urls":["turn.y-not.app:12345"],"credential":"testpass","username":"testuser"}],"SignalingUrl":"ws://s.y-not.app","IsConference":true,"MaxIceRestart":2,"KeepSignalingAlive":true}';
 
         let lIndex = CAPI_MediaNetwork_Create(in_json);
         expect(lIndex).toBeGreaterThan(-1);

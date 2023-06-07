@@ -20,14 +20,14 @@ export class VideoInputApp {
 
     public constructor() {
         this.mNetConfig.IceServers = [
-            { urls: "stun:stun.because-why-not.com:443" },
+            { urls: "stun:t.y-not.app:443" },
             { urls: "stun:stun.l.google.com:19302" }
         ];
         //use for testing conferences 
         //this.mNetConfig.IsConference = true;
-        //this.mNetConfig.SignalingUrl = "wss://signaling.because-why-not.com/testshared";
+        //this.mNetConfig.SignalingUrl = "wss://s.y-not.app/testshared";
         this.mNetConfig.IsConference = false;
-        this.mNetConfig.SignalingUrl = "wss://signaling.because-why-not.com/callapp";
+        this.mNetConfig.SignalingUrl = "wss://s.y-not.app/callapp";
     }
 
 

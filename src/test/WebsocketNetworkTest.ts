@@ -39,9 +39,9 @@ export class WebsocketTest extends IBasicNetworkTest {
     //replace with valid url that has a server behind it
     //public static sUrl = 'ws://localhost:12776/test';
     //public static sUrlShared = 'ws://localhost:12776/testshared';
-    public static sUrl = 'ws://signaling.because-why-not.com';
+    public static sUrl = 'ws://s.y-not.app';
     //public static sUrl = 'ws://192.168.1.3:12776';
-    public static sUrlShared = 'ws://signaling.because-why-not.com/testshared';
+    public static sUrlShared = 'ws://s.y-not.app/testshared';
     //any url to simulate offline server
     public static sBadUrl = 'ws://localhost:13776';
 
