@@ -62,6 +62,7 @@ export class CallApp
 
     private mAutoRejoin = true;
 
+    private static instanceNumber = 0;
 
     public constructor()
     {
@@ -70,7 +71,15 @@ export class CallApp
             {urls: "stun:stun.l.google.com:19302"}
         ];
         this.mNetConfig.IsConference = false;
-        this.mNetConfig.SignalingUrl = "wss://s.y-not.app/callapp";
+        //this.mNetConfig.SignalingUrl = "wss://s.y-not.app/callapp";
+
+        if (CallApp.instanceNumber == 0)
+        {
+            this.mNetConfig.SignalingUrl = "text_answer";
+        } else {
+            this.mNetConfig.SignalingUrl = "text_offer";
+        }
+        CallApp.instanceNumber++;
         //uncommenting this will make the callapp incompatible to the default configuration!
         //(new connection will immediately disconnect again after being established)
         //this.mNetConfig.KeepSignalingAlive = true;

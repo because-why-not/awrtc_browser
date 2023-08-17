@@ -28,7 +28,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import { IBasicNetwork, LocalNetwork, WebsocketNetwork } from "./index";
+import { IBasicNetwork, LocalNetwork, TextNetwork, WebsocketNetwork } from "./index";
 
 export class NetworkConfig {
 
@@ -42,7 +42,7 @@ export class NetworkConfig {
         this.mIceServers = value;
     }
 
-    private mSignalingUrl = null;
+    private mSignalingUrl: string = null;
     public get SignalingUrl() {
         return this.mSignalingUrl;
     }
@@ -96,6 +96,8 @@ export class NetworkConfig {
         let res = null;
         if (this.mSignalingUrl == null || this.mSignalingUrl == "") {
             res = new LocalNetwork();
+        } else if (this.mSignalingUrl.startsWith("text")) {
+            res = new TextNetwork(this.mSignalingUrl);
         } else {
             res = new WebsocketNetwork(this.mSignalingUrl);
         }

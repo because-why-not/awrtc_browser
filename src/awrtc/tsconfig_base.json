@@ -18,6 +18,7 @@
     "./network/WebRtcNetwork.ts",
     "./network/WebRtcPeer.ts",
     "./network/WebsocketNetwork.ts",
+    "./network/TextNetwork.ts",
     "./network/LocalNetwork.ts",
     "./network/NetworkConfig.ts",
     "./network/index.ts",
