@@ -1,11 +1,155 @@
 import * as awrtc from "../awrtc/index"
 import { WebRtcHelper } from "../awrtc/index";
 
-/**
- * Copy of the CallApp to test custom video input
+/** Based on a copy of the CallApp to test custom video input
+    This example shows how to send a stream from a canvas.  By default it will play an 
+    animation moving along a 360 degree panorama. With higher resolution / speeds this
+    will push WebRTC to its bitrate limit and make quality & performance issues more
+    visible for testing purposes.
+    Resolution & speed can be changed below to test different scenarios. By default
+    WebRTC usually hits a limit around 2.5 MBit/s.
+
+    See InitCanvas and videoinputapp for configuration
+        
  */
+
+function InitCanvas(selector:string, width: number, height: number, fps: number) : HTMLCanvasElement { 
+
+    const canvas = document.querySelector(selector) as HTMLCanvasElement;
+    
+    canvas.width = width;
+    canvas.height = height;
+
+    //FPS for the animation. 0 for no fps limit
+    const targetFps = fps;
+    //speed of the test animation in pixels / sec
+    const speed = canvas.width / 2; 
+    //fast. needs high bitrate or webrtc will drop quality
+    //const speed = 10000;
+
+    //Image used for test animation
+    const drawImage = true;
+    
+    //draw a few 1px wide lines as overlay. this helps seeing visible compression issues on the receiver side
+    const drawLines = true;
+
+
+    let imageOffset = 0;
+    let img = new Image();
+    img.src = 'flagstaff_loop.jpg'; 
+    
+
+    let counter = 0;
+    let lastFrame = Date.now();
+
+
+    const ctx = canvas.getContext("2d");
+    
+    function loop()
+    {
+        if (ctx == null) {
+            console.error("No context. ctx == null");
+            return;
+        }
+        let now = Date.now();
+        let elapsed = (now - lastFrame) / 1000;
+        elapsed = Math.round(elapsed * 1000) / 1000;
+        lastFrame = now;
+        //draw a background. if we see this color something is broken
+        ctx.fillStyle = "#770000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        if(drawImage)
+        {
+            const scaledWidth = img.width * (canvas.height / img.height);
+            ctx.drawImage(img, imageOffset, 0, scaledWidth, canvas.height);
+            ctx.drawImage(img, scaledWidth + imageOffset, 0, scaledWidth, canvas.height);
+            imageOffset -= speed * elapsed;
+            if (-imageOffset >= scaledWidth) {
+                imageOffset = 0;
+            }
+        }
+
+        if (drawLines)
+        {
+            for(let i = 0; i< 11; i++){       
+                let {x,y} = getCoordinates(90 / 10 * i)
+                ctx.strokeStyle = "#000000";      
+                //ctx.lineWidth = i + 1;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(3820 * x, 2160 * y);
+                ctx.closePath();
+                ctx.stroke();
+            }
+        }
+
+        
+
+        counter++;
+
+        //prepare next frame
+        if(targetFps == 0)
+        {
+            requestAnimationFrame(loop);
+        }else{
+            //to reduce the FPS but isn't very accurate
+            setTimeout(()=>{
+                requestAnimationFrame(loop);
+            }, 1000 / targetFps);
+        }
+    }
+    function getCoordinates(angle) {
+        const radians = (Math.PI / 180) * angle;  // Convert the angle to radians
+        const x = Math.cos(radians);  // Calculate the x coordinate
+        const y = Math.sin(radians);  // Calculate the y coordinate
+        return {x: x, y: y};
+    }
+    loop();
+    return canvas;
+}
+
+export function videoinputapp(parent: HTMLElement, selector: string) {
+    WebRtcHelper.EmitAdapter();
+    let app: VideoInputApp;
+    console.log("init callapp");
+    if (parent == null) {
+        console.log("parent was null");
+        parent = document.body;
+    }
+    awrtc.SLog.SetLogLevel(awrtc.SLogLevel.Info);
+    app = new VideoInputApp();
+    
+    //how often the canvas renders a new frame
+    //0 => use requestAnimationFrame instead of setting an exact framerate
+    //values above 30 might not work well due to setInterval resolution
+    let render_fps = 0;
+
+    //how often WebRTC captures and sends a frame (assuming network & cpu can keep up)
+    //0 => let the browser handle it automatically
+    //watch out setting values around 30 here seems to cause a lot more stuttering than expected. best to keep at 0
+    let stream_fps = 0;
+    //changes the size of the canvas. 1080p works well with VideoBitrateKbits set to 10,000.
+    //it takes a 30 sec or so for WebRTC to slowly increase bitrate
+    let width = 1920; let height = 1080; 
+
+    //uncomment below to overwrite WebRTC defaults
+    app.MediaConfig.VideoBitrateKbits = 10000;
+    //app.MediaConfig.VideoCodecs = ["VP8", "H264", "VP9"];
+    //app.MediaConfig.VideoContentHint = "detail";
+    
+    
+
+    const canvas = InitCanvas(selector, width, height, render_fps) as HTMLCanvasElement;
+    const devname = selector;
+    awrtc.Media.SharedInstance.VideoInput.AddCanvasDevice(canvas, devname, canvas.width, canvas.height, stream_fps);
+    
+
+    app.setupUi(parent, devname);
+}
+    
 export class VideoInputApp {
-    public static sVideoDevice = null;
+    
     private mAddress;
     private mNetConfig = new awrtc.NetworkConfig();
     private mCall: awrtc.BrowserWebRtcCall = null;
@@ -55,9 +199,10 @@ export class VideoInputApp {
 
 
 
-    public Start(address, audio, video): void {
+    public Start(): void {
         if (this.mCall != null)
             this.Stop();
+
 
         this.mIsRunning = true;
         this.Ui_OnStart()
@@ -65,15 +210,8 @@ export class VideoInputApp {
         console.log("Using signaling server url: " + this.mNetConfig.SignalingUrl);
 
         //create media configuration
-        var config = new awrtc.MediaConfig();
-        config.Audio = audio;
-        config.Video = video;
-        config.IdealWidth = 640;
-        config.IdealHeight = 480;
-        config.IdealFps = 30;
-        if (VideoInputApp.sVideoDevice !== null) {
-            config.VideoDeviceName = VideoInputApp.sVideoDevice;
-        }
+        var config = this.mMediaConfig;
+
 
         //For usage in HTML set FrameUpdates to false and wait for  MediaUpdate to
         //get the VideoElement. By default awrtc would deliver frames individually
@@ -106,7 +244,7 @@ export class VideoInputApp {
         //Conference mode = everyone listening will connect to each other
         //Call mode -> If the address is free it will wait for someone else to connect
         //          -> If the address is used then it will fail to listen and then try to connect via Call(address);
-        this.mCall.Listen(address);
+        this.mCall.Listen(this.mAddress);
 
     }
 
@@ -221,8 +359,11 @@ export class VideoInputApp {
 
 
     //UI calls. should be moved out into its own class later
-    private mAudio;
-    private mVideo;
+    private mMediaConfig = new awrtc.MediaConfig();
+    public get MediaConfig() :  awrtc.MediaConfig {
+        return this.mMediaConfig;
+    }
+       
     private mAutostart;
     private mUiAddress: HTMLInputElement;
     private mUiAudio: HTMLInputElement;
@@ -232,7 +373,7 @@ export class VideoInputApp {
     private mUiLocalVideoParent: HTMLElement;
     private mUiRemoteVideoParent: HTMLElement;
 
-    public setupUi(parent: HTMLElement) {
+    public setupUi(parent: HTMLElement, deviceName:string) {
         this.mUiAddress = parent.querySelector<HTMLInputElement>(".callapp_address");
         this.mUiAudio = parent.querySelector<HTMLInputElement>(".callapp_send_audio");
         this.mUiVideo = parent.querySelector<HTMLInputElement>(".callapp_send_video");
@@ -246,11 +387,12 @@ export class VideoInputApp {
         this.mUiButton.onclick = this.Ui_OnStartStopButtonClicked;
 
         //set default value + make string "true"/"false" to proper booleans
-        this.mAudio = this.GetParameterByName("audio");
-        this.mAudio = this.tobool(this.mAudio, true)
+        this.mMediaConfig.Audio = this.tobool(this.GetParameterByName("audio"), true)
 
-        this.mVideo = this.GetParameterByName("video");
-        this.mVideo = this.tobool(this.mVideo, true);
+        this.mMediaConfig.Video = this.tobool(this.GetParameterByName("video"), true);
+
+        
+        this.mMediaConfig.VideoDeviceName = deviceName;
 
         this.mAutostart = this.GetParameterByName("autostart");
         this.mAutostart = this.tobool(this.mAutostart, false);
@@ -277,10 +419,10 @@ export class VideoInputApp {
 
         if (this.mAutostart) {
             console.log("Starting automatically ... ")
-            this.Start(this.mAddress, this.mAudio, this.mVideo);
+            this.Start();
         }
 
-        console.log("address: " + this.mAddress + " audio: " + this.mAudio + " video: " + this.mVideo + " autostart: " + this.mAutostart);
+        console.log("address: " + this.mAddress + " audio: " + this.mMediaConfig.Audio + " video: " + this.mMediaConfig.Video + " autostart: " + this.mAutostart);
     }
     private Ui_OnStart() {
         this.mUiButton.textContent = "Stop";
@@ -318,23 +460,23 @@ export class VideoInputApp {
 
             this.Stop();
         } else {
-            this.Start(this.mAddress, this.mAudio, this.mVideo);
+            this.Start();
         }
 
     }
     public Ui_OnUpdate = () => {
         console.debug("OnUiUpdate");
         this.mAddress = this.mUiAddress.value;
-        this.mAudio = this.mUiAudio.checked;
-        this.mVideo = this.mUiVideo.checked;
+        this.mMediaConfig.Audio = this.mUiAudio.checked;
+        this.mMediaConfig.Video = this.mUiVideo.checked;
         this.mUiUrl.innerHTML = this.GetUrl();
     }
 
     public Ui_Update(): void {
         console.log("UpdateUi");
         this.mUiAddress.value = this.mAddress;
-        this.mUiAudio.checked = this.mAudio;
-        this.mUiVideo.checked = this.mVideo;
+        this.mUiAudio.checked = this.mMediaConfig.Audio;
+        this.mUiVideo.checked = this.mMediaConfig.Video;
         this.mUiUrl.innerHTML = this.GetUrl();
     }
 
@@ -347,33 +489,9 @@ export class VideoInputApp {
         return result;
     }
     private GetUrlParams() {
-        return "?a=" + this.mAddress + "&audio=" + this.mAudio + "&video=" + this.mVideo + "&" + "autostart=" + true;
+        return "?a=" + this.mAddress + "&audio=" + this.mMediaConfig.Audio + "&video=" + this.mMediaConfig.Video + "&" + "autostart=" + true;
     }
     private GetUrl() {
         return location.protocol + '//' + location.host + location.pathname + this.GetUrlParams();
     }
-}
-
-
-export function videoinputapp(parent: HTMLElement, canvas: HTMLCanvasElement) {
-    WebRtcHelper.EmitAdapter();
-    let callApp: VideoInputApp;
-    console.log("init callapp");
-    if (parent == null) {
-        console.log("parent was null");
-        parent = document.body;
-    }
-    awrtc.SLog.SetLogLevel(awrtc.SLogLevel.Info);
-    callApp = new VideoInputApp();
-    const media = new awrtc.Media();
-    const devname = "canvas";
-    awrtc.Media.SharedInstance.VideoInput.AddCanvasDevice(canvas, devname, canvas.width, canvas.height, 30);
-
-    setInterval(() => {
-        awrtc.Media.SharedInstance.VideoInput.UpdateFrame(devname);
-    }, 50);
-    VideoInputApp.sVideoDevice = devname;
-
-    callApp.setupUi(parent);
-
 }

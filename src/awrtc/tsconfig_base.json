@@ -15,6 +15,7 @@
   "files": [
     "./network/Helper.ts",
     "./network/INetwork.ts",
+    "./network/IWebRtcNetwork.ts",
     "./network/WebRtcNetwork.ts",
     "./network/WebRtcPeer.ts",
     "./network/WebsocketNetwork.ts",

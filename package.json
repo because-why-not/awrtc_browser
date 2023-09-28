@@ -1,6 +1,6 @@
 {
   "name": "awrtc_browser",
-  "version": "1.986.0",
+  "version": "1.986.2",
   "description": "Compatible browser implementation to the Unity asset WebRTC Video Chat. Try examples in build folder",
   "author": "because-why-not.com Limited",
   "license": "BSD-3-Clause",
@@ -11,7 +11,8 @@
     "webpack": "webpack",
     "build": "webpack && tsc -p ./src/awrtc",
     "watch": "webpack --watch",
-    "clean": "shx rm -rf ./build/awrtc ./build/bundle"
+    "clean": "shx rm -rf ./build/awrtc ./build/bundle",
+    "test": "jasmine-browser-runner runSpecs"
   },
   "files": [
     "build",
@@ -22,8 +23,9 @@
     "url": "https://github.com/because-why-not/awrtc_browser"
   },
   "devDependencies": {
-    "@types/jasmine": "^4.3.1",
-    "jasmine": "^4.5.0",
+    "@types/jasmine": "^4.3.5",
+    "jasmine-browser-runner": "^2.1.0",
+    "jasmine-core": "^5.1.0",
     "karma": "^6.4.1",
     "karma-chrome-launcher": "^3.1.1",
     "karma-firefox-launcher": "^2.1.2",

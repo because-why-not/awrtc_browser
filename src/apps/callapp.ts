@@ -67,6 +67,7 @@ export class CallApp
     {
         this.mNetConfig.IceServers = [ 
             {urls: "stun:t.y-not.app:443"},
+            //{urls: "turn:t.y-not.app:443", username: "user", credential:"pass"},
             {urls: "stun:stun.l.google.com:19302"}
         ];
         this.mNetConfig.IsConference = false;
@@ -114,15 +115,20 @@ export class CallApp
         console.log("Using signaling server url: " + this.mNetConfig.SignalingUrl);
 
         //create media configuration
-        var config = this.mMediaConfig;
-        config.IdealFps = 30;
+        
         
         this.mMediaConfig.VideoDeviceName = this.UI_GetVideoDevice(); 
+        
+        /*
+        this.mMediaConfig.VideoCodecs = ["H264", "VP9"];
+        this.mMediaConfig.VideoBitrateKbits = 50000;
+        this.mMediaConfig.VideoContentHint = "detail";
+        */
         
         //For usage in HTML set FrameUpdates to false and wait for  MediaUpdate to
         //get the VideoElement. By default awrtc would deliver frames individually
         //for use in Unity WebGL
-        console.log("requested config:" + JSON.stringify(config));
+        console.log("requested config:" + JSON.stringify(this.mMediaConfig));
         //setup our high level call class.
         this.mCall = new awrtc.BrowserWebRtcCall(this.mNetConfig);
 
@@ -144,7 +150,7 @@ export class CallApp
         this.mWaitForInitialConfig = true;
         //configure media. This will request access to media and can fail if the user doesn't have a proper device or
         //blocks access
-        this.mCall.Configure(config);
+        this.mCall.Configure(this.mMediaConfig);
         
         //Now we wait for the "ConfigurationComplete" event to continue
 
@@ -326,7 +332,7 @@ export class CallApp
 
         
         let devname = "Screen capture";
-        Media.SharedInstance.EnableScreenCapture(devname);
+        Media.SharedInstance.EnableScreenCapture(devname, true);
         this.mMediaConfig.VideoDeviceName = devname;
 
         this.mUiAddress = parent.querySelector<HTMLInputElement>(".callapp_address");

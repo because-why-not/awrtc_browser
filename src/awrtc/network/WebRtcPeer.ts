@@ -30,6 +30,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import {IBasicNetwork, ConnectionId, NetworkEvent, NetEventType} from "./index"
 import { Queue, Helper, SLog, Debug, Output, Random, SLogger } from "./Helper";
 import { NetworkConfig } from "index";
+import { RtcEvent, StatsEvent } from "./IWebRtcNetwork";
+
 
 export class SignalingInfo {
 
@@ -88,6 +90,9 @@ export enum WebRtcInternalState {
 }
 
 
+interface AnyRTCStatsReport extends RTCStatsReport {
+    values():any
+}
 
 export class PeerConfig{
     public RtcConfig: RTCConfiguration;
@@ -104,6 +109,9 @@ export class PeerConfig{
 export abstract class AWebRtcPeer {
     //activates additional log messages
     public readonly DEBUG = false;
+
+
+
     public LOG_SIGNALING = true;
 
     //true will activate the ice restart mechanism. false means it will destroy the peer on "failed" event
@@ -163,7 +171,7 @@ export abstract class AWebRtcPeer {
     private mReadyForIce = false;
     private mBufferedIceCandidates: RTCIceCandidate[] = [];
     //True means this peer will permanently have the offerer role
-    private mIsOfferer = false;
+    protected mIsOfferer = false;
 
 
     private static sNextId = 0;
@@ -446,7 +454,7 @@ export abstract class AWebRtcPeer {
      * before the actual answer is created.
      * @returns Promise returned by createOffer
      */
-    protected CreateOfferImpl() {
+    protected async CreateOfferImpl() {
         const mOfferOptions: RTCOfferOptions = { "offerToReceiveAudio": false, "offerToReceiveVideo": false };
         return this.mPeer.createOffer(mOfferOptions);
     }
@@ -461,12 +469,12 @@ export abstract class AWebRtcPeer {
         this.log.L("CreateOffer");
         let createOfferPromise = this.CreateOfferImpl();
         createOfferPromise.then((desc_in: RTCSessionDescription) => {
-            let desc_out = this.ProcLocalSdp(desc_in);
+            let desc_out = this.ProcessLocalSdp(desc_in);
             let msg: string = JSON.stringify(desc_out);
 
             let setDescPromise = this.mPeer.setLocalDescription(desc_in);
 
-            setDescPromise.then(() => {
+            setDescPromise.then(async () => {
                 this.RtcSetSignalingStarted();
                 this.EnqueueOutgoing(msg);
             });
@@ -482,125 +490,13 @@ export abstract class AWebRtcPeer {
         });
     }
 
-    //Gives a specific codec priority over the others
-    private EditCodecs(lines: string[]){
-
-        let prefCodec = "H264";
-        this.log.LW("sdp munging: prioritizing codec " + prefCodec);
-
-        //index and list of all video codec id's
-        //e.g.: m=video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102 121 127 120 125 107 108 109 35 36 124 119 123 118 114 115 116
-        let vcodecs_line_index;
-        let vcodecs_line_split: string[];
-        let vcodecs_list : string[];
-        for(let i = 0; i < lines.length; i++){
-            let line = lines[i];
-            if(line.startsWith("m=video")){
-                vcodecs_line_split= line.split(" ");
-                vcodecs_list= vcodecs_line_split.slice(3, vcodecs_line_split.length);
-                vcodecs_line_index = i;
-                //console.log(vcodecs_list);
-                break;
-            }
-        }
-        //list of video codecs positioned based on our priority list
-        let vcodecs_list_new : string[] = [] ;
-        //start below the the m=video line
-        for(let i = vcodecs_line_index + 1; i < lines.length; i++){
-            let line = lines[i];
-            let prefix = "a=rtpmap:";
-            if(line.startsWith(prefix)){
-                let subline = line.substr(prefix.length);
-                let split = subline.split(" ");
-                let codecId = split[0];
-                let codecDesc = split[1];
-                let codecSplit= codecDesc.split("/");
-                let codecName = codecSplit[0];
-                
-                //sanity check. is this a video codec?
-                if(vcodecs_list.includes(codecId)){
-                    if(codecName === prefCodec){
-                        vcodecs_list_new.unshift(codecId);
-                    }else{
-                        vcodecs_list_new.push(codecId);
-                    }
-                }
-            }
-        }
-        //first 3 elements remain the same
-        let vcodecs_line_new = vcodecs_line_split[0] + " " + vcodecs_line_split[1] + " " + vcodecs_line_split[2];
-        //add new codec list after it
-        vcodecs_list_new.forEach((x)=>{vcodecs_line_new = vcodecs_line_new + " " + x});
-        //replace old line
-        lines[vcodecs_line_index] = vcodecs_line_new;
+    protected ProcessLocalSdp(desc: RTCSessionDescription): RTCSessionDescription
+    {
+        return desc;
     }
-
-    //Replaces H264 profile levels
-    //iOS workaround. Streaming from iOS to browser currently fails without this if
-    //resolution is above 720p and h264 is active
-    private EditProfileLevel(lines: string[]){
-        const target_profile_level_id = "2a";
-        //TODO: Make sure we only edit H264. There could be other codecs in the future
-        //that look identical
-        console.warn("sdp munging: replacing h264 profile-level with " + target_profile_level_id);
-        let vcodecs_line_index;
-        let vcodecs_line_split: string[];
-        let vcodecs_list : string[];
-        for(let i = 0; i < lines.length; i++){
-            let line = lines[i];
-            if(line.startsWith("a=fmtp:"))
-            {
-                //looking for profile-level-id=42001f
-                //we replace the 1f
-                let searchString = "profile-level-id=";
-                let sublines = line.split(";");
-                let updateLine = false;
-                for(let k = 0; k < sublines.length; k++){
-                    let subline = sublines[k];
-                    if(subline.startsWith(searchString)){
-                        let len = searchString.length + 4;
-                        sublines[k] = sublines[k].substr(0, len) + target_profile_level_id;
-                        updateLine = true;
-                        break;
-                    }
-                }
-                if(updateLine){
-                    lines[i] = sublines.join(";");
-                }
-            }
-        }
-    }
-
-    static MUNGE_SDP = false;
-    
-    private ProcLocalSdp(desc: RTCSessionDescription) :RTCSessionDescription {
-        if(AWebRtcPeer.MUNGE_SDP === false)
-            return desc
-
-        console.warn("sdp munging active");
-        let sdp_in = desc.sdp;
-        let sdp_out = "";
-        let lines = sdp_in.split("\r\n");
-
-        //this.EditCodecs(lines);
-        //this.EditProfileLevel(lines);
-
-        sdp_out = lines.join("\r\n");
-        let desc_out = {type: desc.type, sdp: sdp_out} as RTCSessionDescription;
-        return desc_out;
-    }
-    private ProcRemoteSdp(desc: RTCSessionDescription) : RTCSessionDescription{
-        if(AWebRtcPeer.MUNGE_SDP === false)
-            return desc;
-        console.warn("sdp munging active");
-        let sdp_in = desc.sdp;
-        let sdp_out = "";
-        let lines = sdp_in.split("\r\n");
-        this.EditCodecs(lines);
-        sdp_out = lines.join("\r\n");
-        let desc_out = {type: desc.type, sdp: sdp_out} as RTCSessionDescription;
-
-        return desc_out;
+    protected ProcessRemoteSdp(desc: RTCSessionDescription): RTCSessionDescription
+    {
+        return desc;
     }
 
     /**Triggers the actual createAnswer method on the Peer
@@ -608,7 +504,7 @@ export abstract class AWebRtcPeer {
      * before the actual answer is created.
      * @returns Promise returned by createAnswer
      */
-    protected CreateAnswerImpl() {
+    protected async CreateAnswerImpl() {
         return this.mPeer.createAnswer();
     }
 
@@ -618,13 +514,13 @@ export abstract class AWebRtcPeer {
         this.mInActiveRoleNegotiation = false;
         this.mReadyForIce = false;
         
-        offer = this.ProcRemoteSdp(offer);
+        offer = this.ProcessRemoteSdp(offer);
         let remoteDescPromise = this.mPeer.setRemoteDescription(offer);
         remoteDescPromise.then(() => {
             this.StartIce();
             let createAnswerPromise = this.CreateAnswerImpl();
             createAnswerPromise.then((desc_in: RTCSessionDescription) => {
-                let desc_out = this.ProcLocalSdp(desc_in);
+                let desc_out = this.ProcessLocalSdp(desc_in);
                 let msg: string = JSON.stringify(desc_out);
                 let localDescPromise = this.mPeer.setLocalDescription(desc_in);
                 localDescPromise.then(() => {
@@ -653,7 +549,7 @@ export abstract class AWebRtcPeer {
     private RecAnswer(answer: RTCSessionDescription): void {
         if(this.DEBUG)
             this.log.LW("RecAnswer");
-        answer = this.ProcRemoteSdp(answer);
+        answer = this.ProcessRemoteSdp(answer);
         let remoteDescPromise = this.mPeer.setRemoteDescription(answer);
         remoteDescPromise.then(() => {
             //all done
@@ -862,6 +758,7 @@ export class WebRtcDataPeer extends AWebRtcPeer {
     }
 
     private mEvents: Queue<NetworkEvent> = new Queue<NetworkEvent>();
+    private mRtcEvents: Queue<RtcEvent> = new Queue<RtcEvent>();
 
 
     private static sLabelReliable: string = "reliable";
@@ -1128,5 +1025,20 @@ export class WebRtcDataPeer extends AWebRtcPeer {
         return this.mReliableDataChannelReady && this.mUnreliableDataChannelReady;
     }
 
+
+    public RequestStats(): void {
+        setTimeout(async () => { 
+            
+            const all = await this.mPeer.getStats(null) as AnyRTCStatsReport;
+            const reports = Array.from(all.values());
+            var evt = new StatsEvent(this.mConnectionId, reports as RTCStatsReport[]);
+            this.mRtcEvents.Enqueue(evt);
+
+        }, 0);
+    }
+
+    public DequeueRtcEvent(): RtcEvent{
+        return this.mRtcEvents.Dequeue();
+    }
 
 }

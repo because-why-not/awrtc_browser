@@ -35,6 +35,7 @@ import {
 import { Queue, SLogger, Output } from "./Helper";
 import { PeerConfig } from "./WebRtcPeer";
 import { NetworkConfig } from "index";
+import { RtcEvent } from "./IWebRtcNetwork";
 
 export enum WebRtcNetworkServerState {
     Invalid,
@@ -57,7 +58,12 @@ export class WebRtcNetwork implements IBasicNetwork {
     private mInSignaling: { [id: number]: WebRtcDataPeer } = {}
     //private mNextId: ConnectionId = new ConnectionId(1);
     
+    //Buffer for network events (those that conform the cross platform IBasicNetwork api)
     private mEvents: Queue<NetworkEvent> = new Queue<NetworkEvent>();
+
+    //Buffer for WebRTC specific events
+    private mRtcEvents: Queue<RtcEvent> = new Queue<RtcEvent>();
+
     private mIdToConnection: { [id: number]: WebRtcDataPeer } = {};
     protected get IdToConnection() {
         return this.mIdToConnection;
@@ -146,6 +152,7 @@ export class WebRtcNetwork implements IBasicNetwork {
 
     public Flush(): void {
         this.mSignalingNetwork.Flush();
+        this.mRtcEvents.Clear();
     }
 
     public SendData(id: ConnectionId, data: Uint8Array/*, offset : number, length : number*/, reliable: boolean): boolean {
@@ -445,4 +452,31 @@ export class WebRtcNetwork implements IBasicNetwork {
         return String.fromCharCode.apply(null, arr);
     }
     
+    public RequestStats(): void{
+        for (var key in this.mIdToConnection) {
+            var peer: WebRtcDataPeer = this.mIdToConnection[key];
+            peer.RequestStats();
+        }
+    }
+
+    
+    protected EnqueueRtcEvent(evt: RtcEvent)
+    {
+        this.mRtcEvents.Enqueue(evt);
+    }
+    public DequeueRtcEvent(): RtcEvent{
+        
+        if (this.mRtcEvents.Count() > 0)
+            return this.mRtcEvents.Dequeue();
+
+        //check the peers for their events
+        //TODO: add to buffered
+        for (var key in this.mIdToConnection) {
+            var peer: WebRtcDataPeer = this.mIdToConnection[key];
+            const v = peer.DequeueRtcEvent();
+            if (v)
+                return v;
+        }
+        return null;
+    }
 }

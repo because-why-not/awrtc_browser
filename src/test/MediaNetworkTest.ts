@@ -28,8 +28,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { BrowserMediaNetwork, NetworkConfig, MediaConfig,
-     ConnectionId, MediaEvent, MediaEventType,
-      MediaConfigurationState, NetEventType, BrowserMediaStream, DeviceApi, VideoInput, Media, SLog, SLogLevel, IFrameData } from "../awrtc/index";
+     ConnectionId,
+      MediaConfigurationState, NetEventType, BrowserMediaStream, Media, SLog, SLogLevel, IFrameData, NetworkEvent, StreamAddedEvent } from "../awrtc/index";
+import { RtcEventType, StatsEvent } from "../awrtc/network/IWebRtcNetwork";
 
 
 class TestVideoSource
@@ -145,7 +146,7 @@ export class MediaNetworkTest{
         6. audio on, video on -> audio off, video off
         7. change of video device
         */
-        it("Reconfigure_Remote", async (done) => {
+        it("Reconfigure_Remote", async () => {
             BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
             SLog.SetLogLevel(SLogLevel.Info);
 
@@ -211,10 +212,9 @@ export class MediaNetworkTest{
             expect(localFrame.Buffer[2]).toBeLessThan(5);
             expect(localFrame.Buffer[3]).toBe(255);
             console.log("test done");
-            done();
 
         });
-        it("Reconfigure_Local", async (done) => {
+        it("Reconfigure_Local", async () => {
 
             let mediaConfig = new MediaConfig();
             mediaConfig.Video = true;
@@ -272,7 +272,6 @@ export class MediaNetworkTest{
             expect(localFrame.Buffer[2]).toBeLessThan(5);
             expect(localFrame.Buffer[3]).toBe(255);
             console.log("test done");
-            done();
 
         });
 
@@ -297,7 +296,7 @@ export class MediaNetworkTest{
             }, 10);
         });
 
-        it("MediaEventLocal", (done) => {
+        it("StreamAddedEventLocal", (done) => {
             BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
 
             let mediaConfig = new MediaConfig();
@@ -307,11 +306,11 @@ export class MediaNetworkTest{
 
             this.testInterval(()=>{
                 network.Update();
-                let evt : MediaEvent = null;
-                while((evt = network.DequeueMediaEvent()) != null)
+                let evt : StreamAddedEvent = null;
+                while((evt = network.DequeueRtcEvent() as StreamAddedEvent) != null)
                 {
                     console.log("Stream added",evt );
-                    expect(evt.EventType).toBe(MediaEventType.StreamAdded);
+                    expect(evt.EventType).toBe(RtcEventType.StreamAdded);
                     expect(evt.Args.videoHeight).toBeGreaterThan(0);
                     expect(evt.Args.videoWidth).toBeGreaterThan(0);
                     done();
@@ -322,7 +321,7 @@ export class MediaNetworkTest{
         });
 
 
-        it("MediaEventRemote", (done) => {
+        it("StreamAddedEventRemote", (done) => {
             BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
             let testaddress = "testaddress" + Math.random();
             let sender = this.createDefault();
@@ -368,19 +367,19 @@ export class MediaNetworkTest{
                 
 
 
-                let evt : MediaEvent = null;
+                let evt : StreamAddedEvent = null;
 
-                while((evt = sender.DequeueMediaEvent()) != null)
+                while((evt = sender.DequeueRtcEvent() as StreamAddedEvent) != null)
                 {
-                    expect(evt.EventType).toBe(MediaEventType.StreamAdded);
+                    expect(evt.EventType).toBe(RtcEventType.StreamAdded);
                     expect(evt.Args.videoHeight).toBeGreaterThan(0);
                     expect(evt.Args.videoWidth).toBeGreaterThan(0);
                     senderFrame = true;
                     console.log("sender received first frame");
                 }
-                while((evt = receiver.DequeueMediaEvent()) != null)
+                while((evt = receiver.DequeueRtcEvent() as StreamAddedEvent) != null)
                 {
-                    expect(evt.EventType).toBe(MediaEventType.StreamAdded);
+                    expect(evt.EventType).toBe(RtcEventType.StreamAdded);
                     expect(evt.Args.videoHeight).toBeGreaterThan(0);
                     expect(evt.Args.videoWidth).toBeGreaterThan(0);
                     receiverFrame = true;
@@ -394,6 +393,102 @@ export class MediaNetworkTest{
             }, 40);
 
         }, 15000);
+
+        
+        it("get_stats", async () => {
+            BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
+            SLog.SetLogLevel(SLogLevel.Info);
+
+
+            let mediaConfig = new MediaConfig();
+            mediaConfig.Video = true;
+            mediaConfig.VideoDeviceName = "blue";
+
+            let net1 = this.createDefault();
+            net1.Configure(mediaConfig);
+
+            let net2 = this.createDefault();
+            
+
+            while (net1.GetConfigurationState() === MediaConfigurationState.InProgress) {
+                net1.Update();
+                await sleep(10);
+            }
+            console.log("configure done");
+            expect(net1.GetConfigurationState()).toBe(MediaConfigurationState.Successful);
+            const address = "test" + Date.now();
+            net1.StartServer(address);
+            
+            const sleeptime = 10;
+            let waittime = 0;
+            //fail if we didn't reach a successful test condition after this time
+            const timeout = 1000;
+
+            let net1_to_net2: ConnectionId = ConnectionId.INVALID;
+            let net2_to_net1: ConnectionId = ConnectionId.INVALID;
+            let stats_event: StatsEvent = null;
+
+            let connected = false;
+            //connect
+            //let a few frames play and then request statistics
+            while (waittime < timeout && connected == false)
+            {
+                net1.Update();
+                net2.Update();
+
+                let evt: NetworkEvent = null;
+                while ((evt = net1.Dequeue()))
+                {
+                    if (evt.Type == NetEventType.ServerInitialized) {
+                        net1_to_net2 = evt.ConnectionId;
+                        net2_to_net1 = net2.Connect(address);
+                    } else {
+                        //fail?
+                    }
+                }
+                while ((evt = net2.Dequeue()))
+                {
+                    if (evt.Type == NetEventType.NewConnection) {
+                        connected = true;
+                    } else {
+                        //fail?
+                    }
+                }
+                //expect no stat events yet
+                const evt1 = net1.DequeueRtcEvent();
+                if (evt1)
+                    expect(evt1.EventType).not.toBe(RtcEventType.Stats);
+                const evt2 = net2.DequeueRtcEvent(); 
+                if (evt2)
+                    expect(evt2.EventType).not.toBe(RtcEventType.Stats);
+                
+                
+                await sleep(sleeptime);
+                waittime += sleeptime;
+            }
+
+
+            net1.RequestStats();
+            while (waittime < timeout)
+            {
+                net1.Update();
+                net2.Update();
+                
+                //expect to receive a stats event within timeout
+                const evt = net1.DequeueRtcEvent();
+                if (evt != null && evt.EventType == RtcEventType.Stats) {
+                    stats_event = evt as StatsEvent;
+                    break;
+                }
+
+                await sleep(sleeptime);
+                waittime += sleeptime;
+            }
+            expect(waittime).withContext("StatReports did not arrive within timeout").toBeLessThan(timeout);
+            expect(stats_event).withContext("Network 1 did not receive a stats event.").not.toBeNull();
+            expect(stats_event.Reports.length).withContext("Network 1 did receive an event but it has no reports attached.").toBeGreaterThan(0);
+
+        });
     }
 }
 

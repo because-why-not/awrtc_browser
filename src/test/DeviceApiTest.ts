@@ -45,6 +45,9 @@ describe("DeviceApiTest", () => {
         jasmine.DEFAULT_TIMEOUT_INTERVAL = 10000;
         DeviceApi.Reset();
     });
+    afterEach(()=>{
+        DeviceApi.Reset();
+    });
 
     function printall()
     {
@@ -153,7 +156,7 @@ describe("DeviceApiTest", () => {
                 expect(actual).toBe(expectedVal);
                 counter++;
             }
-                done();
+            done();
         });
         CAPI_DeviceApi_Update();
     });
@@ -233,14 +236,12 @@ describe("DeviceApiTest", () => {
         })
     });
 
-    it("UpdateAsync", async (done) => {
+    it("UpdateAsync", async () => {
         
         expect(DeviceApi.GetVideoDevices().length).toBe(0);
         await DeviceApi.UpdateAsync();
         expect(DeviceApi.GetVideoDevices().length).toBeGreaterThan(0);
         expect(DeviceApi.GetVideoDevices().length).toBe(CAPI_Media_GetVideoDevices_Length());
-        
-        done();
     });
     
     /*

@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2019, because-why-not.com Limited
+Copyright (c) 2023, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -345,8 +345,3 @@ export interface IBasicNetwork extends INetwork {
     /// <returns>Returns the Connection id the established connection will have (only supported by WebRtcNetwork).</returns>
     Connect(address: string): ConnectionId;
 }
-export interface IWebRtcNetwork extends IBasicNetwork {
-    GetBufferedAmount(id: ConnectionId, reliable:boolean): number;
-}
-//export {NetEventType, NetworkEvent, ConnectionId, INetwork, IBasicNetwork};
-

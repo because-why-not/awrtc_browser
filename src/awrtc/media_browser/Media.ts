@@ -28,14 +28,20 @@ export class Media{
 
     private mScreenCaptureDevice = "_screen";
     private mAllowScreenCapture = false;
+    private mAllowAudioCapture = false;
 
     public constructor(){
 
     }
 
-    public EnableScreenCapture(deviceName: string) {
+    public EnableScreenCapture(deviceName: string, captureAudio: boolean) {
         this.mScreenCaptureDevice = deviceName;
         this.mAllowScreenCapture = true;
+        this.mAllowAudioCapture = captureAudio;
+    }
+    public DisableScreenCapture() {
+        this.mAllowScreenCapture = false;
+        this.mAllowAudioCapture = false;
     }
 
     public GetVideoDevices(): string[] {
@@ -89,8 +95,29 @@ export class Media{
                         vconstraints.height = configNeeded.IdealHeight;
                     constraints.video = vconstraints;
                 }
+                if (this.mAllowAudioCapture && configNeeded.Audio)
+                    constraints.audio = true;
                 const screenStream = await (navigator.mediaDevices as any).getDisplayMedia(constraints);
-                result.addTrack(screenStream.getVideoTracks()[0]);
+                if (screenStream.getVideoTracks().length > 0)
+                {
+                    result.addTrack(screenStream.getVideoTracks()[0]);
+                } else {
+                    //TODO: improve error handling
+                    console.warn("Failed to get video access via getDisplayMedia");
+                }
+                
+                if (constraints.audio)
+                {
+                    if (screenStream.getAudioTracks().length > 0)
+                    {
+                        result.addTrack(screenStream.getAudioTracks()[0]);
+                        configNeeded.Audio = false;
+                    } else {
+                        //TODO: The API needs to be more clear here. Unclear if we should continue here
+                        //or fail.
+                        console.warn("Failed to get audio access via getDisplayMedia.");
+                    }
+                }
                 configNeeded.Video = false;
             }
         }

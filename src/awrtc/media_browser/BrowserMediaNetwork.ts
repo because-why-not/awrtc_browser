@@ -27,9 +27,9 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-import { WebRtcNetwork, SLog, ConnectionId, IBasicNetwork, LocalNetwork, WebsocketNetwork, WebRtcDataPeer, Queue, PeerConfig, SLogger }
+import { WebRtcNetwork, SLog, ConnectionId, WebRtcDataPeer, Queue, PeerConfig, SLogger }
     from "../network/index";
-import { IMediaNetwork, MediaConfigurationState, MediaEvent, MediaEventType } from "../media/IMediaNetwork";
+import { IMediaNetwork, MediaConfigurationState, StreamAddedEvent } from "../media/IMediaNetwork";
 import { NetworkConfig } from "../network/NetworkConfig";
 import { MediaConfig } from "../media/MediaConfig";
 import { IFrameData } from "../media/RawFrame";
@@ -60,16 +60,12 @@ import { Media } from "./Media";
  * 
  */
 export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork {
-
-
-    //media configuration set by the user
-    private mMediaConfig: MediaConfig = null;
+    private mMediaConfig: MediaConfig = new MediaConfig();
     //keeps track of audio / video tracks based on local devices
     //will be shared with all connected peers.
     private mLocalStream: BrowserMediaStream = null;
     private mConfigurationState: MediaConfigurationState = MediaConfigurationState.Invalid;
     private mConfigurationError: string = null;
-    private mMediaEvents: Queue<MediaEvent> = new Queue<MediaEvent>();
     
 
 
@@ -145,13 +141,13 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
     private OnLocalStreamUpdated() {
 
         //update all peers on the change
-        Object.values(this.IdToConnection).forEach(x => (x as MediaPeer).SetLocalStream(this.mLocalStream));
+        Object.values(this.IdToConnection).forEach(x => (x as MediaPeer).SetLocalStream(this.mLocalStream, this.mMediaConfig));
 
         //set event handler to trigger once all meta data & video element is available
         if (this.mLocalStream != null)
         {
             this.mLocalStream.InternalStreamAdded = (stream)=>{
-                this.EnqueueMediaEvent(MediaEventType.StreamAdded, ConnectionId.INVALID, this.mLocalStream.VideoElement);
+                this.EnqueueRtcEvent(new StreamAddedEvent(ConnectionId.INVALID, this.mLocalStream.VideoElement));
             };
         }
     }
@@ -168,15 +164,6 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
             this.mLocalStream.Update();
     }
 
-    private EnqueueMediaEvent(type: MediaEventType, id:ConnectionId, args: HTMLVideoElement)
-    {
-        let evt = new MediaEvent(type, id, args);
-        this.mMediaEvents.Enqueue(evt);
-    }
-    public DequeueMediaEvent(): MediaEvent
-    {
-        return this.mMediaEvents.Dequeue();
-    }
     /**
      * Call this every frame after interacting with this instance.
      * 
@@ -186,7 +173,6 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
      */
     public Flush():void{
         super.Flush();
-        this.mMediaEvents.Clear();
     }
 
     /**Poll this after Configure is called to get the result.
@@ -344,13 +330,13 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
     }
     protected CreatePeer(peerId: ConnectionId): WebRtcDataPeer {
 
-        const config = new PeerConfig(this.mNetConfig);
-        let peer = new MediaPeer(peerId, config, this.log);
+        const peerConfig = new PeerConfig(this.mNetConfig);
+        let peer = new MediaPeer(peerId, peerConfig, this.mMediaConfig, this.log);
         peer.InternalStreamAdded = this.MediaPeer_InternalMediaStreamAdded;
         if (this.mLocalStream != null)
             setTimeout(async () => { 
                 //SLog.L("Updating local stream");
-                await peer.SetLocalStream(this.mLocalStream);
+                await peer.SetLocalStream(this.mLocalStream, this.mMediaConfig);
                 this.log.L("Set local stream to new peer");
             });
 
@@ -359,7 +345,7 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
 
     private MediaPeer_InternalMediaStreamAdded = (peer: MediaPeer, stream:BrowserMediaStream):void =>
     {
-        this.EnqueueMediaEvent(MediaEventType.StreamAdded, peer.ConnectionId, stream.VideoElement);
+        this.EnqueueRtcEvent(new StreamAddedEvent(peer.ConnectionId, stream.VideoElement));
     }
 
     protected DisposeInternal(): void

@@ -60,7 +60,7 @@ describe("MediaTest", () => {
         expect(stream).toBeNull();
     });
 
-    it("GetUserMedia_videoinput", async (done) => {
+    it("GetUserMedia_videoinput", async () => {
 
         
         const name = "test_canvas";
@@ -87,7 +87,6 @@ describe("MediaTest", () => {
         expect(streamCanvas2).not.toBeNull();
         expect(streamCanvas2.getAudioTracks().length).toBe(0);
         expect(streamCanvas2.getVideoTracks().length).toBe(1);
-        done();
     });
 
     
@@ -132,7 +131,7 @@ describe("MediaTest", () => {
     }, 15000);
     
     //CAPI needs to be changed to use Media only instead the device API
-    it("MediaCapiVideoInput", async (done) => {
+    it("MediaCapiVideoInput", async () => {
         //empty normal device api
         DeviceApi.Reset();
         expect(CAPI_Media_GetVideoDevices_Length()).toBe(0);
@@ -143,8 +142,6 @@ describe("MediaTest", () => {
         Media.SharedInstance.VideoInput.AddCanvasDevice(canvas, name, canvas.width, canvas.height, 30);
         expect(CAPI_Media_GetVideoDevices_Length()).toBe(1);
         expect(CAPI_Media_GetVideoDevices(0)).toBe(name);
-        
-        done();
     });
 });
 
@@ -208,7 +205,7 @@ describe("MediaStreamTest", () => {
     }
     
 
-    it("buffer_and_trygetframe", async(done) => {
+    it("buffer_and_trygetframe", async() => {
         BrowserMediaStream.DEBUG_SHOW_ELEMENTS = true;
         const testcontainer = MakeTestStreamContainer();
         const stream = new BrowserMediaStream(true);
@@ -265,9 +262,7 @@ describe("MediaStreamTest", () => {
         expect(g).toBeGreaterThan(250);
         expect(b).toBeLessThan(5);
         expect(a).toBeGreaterThan(250);
-
-        //done
-        done();
+        
     });
 
     function createTexture(gl: WebGL2RenderingContext) : WebGLTexture
@@ -293,7 +288,7 @@ describe("MediaStreamTest", () => {
                         pixel);
         return texture;
     }
-    it("texture", async(done) => {
+    it("texture", async() => {
         
         //blue test container to stream from
         const testcontainer = MakeTestStreamContainer();
@@ -347,8 +342,6 @@ describe("MediaStreamTest", () => {
 
         //TODO: could compare whole src / dst buffer to check if something is cut off
         //const compare_buffer = frame.Buffer;
-        
-        done();
     });
 
 });

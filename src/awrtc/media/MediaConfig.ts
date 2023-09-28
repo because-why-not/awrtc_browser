@@ -132,6 +132,30 @@ export class MediaConfig {
         this.mIdealFps = value;
     }
 
+
+    private mVideoCodecs : string[] = [];
+    public get VideoCodecs(): string[] {
+        return this.mVideoCodecs;
+    }
+    public set VideoCodecs(value: string[]) {
+        this.mVideoCodecs = value;
+    }
+    private mVideoBitrateKbits = null;
+    public get VideoBitrateKbits(): number {
+        return this.mVideoBitrateKbits;
+    }
+    public set VideoBitrateKbits(value: number) {
+        this.mVideoBitrateKbits = value;
+    }
+    private mVideoContentHint :string = null;
+    public get VideoContentHint(): string {
+        return this.mVideoContentHint;
+    }
+    public set VideoContentHint(value: string) {
+        this.mVideoContentHint = value;
+    }
+
+
     private mFrameUpdates = false;
 
     /** false - frame updates aren't generated. Useful for browser mode

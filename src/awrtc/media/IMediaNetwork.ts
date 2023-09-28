@@ -27,7 +27,8 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-import { ConnectionId, IWebRtcNetwork } from "../network/index";
+import { ConnectionId} from "../network/INetwork";
+import { IWebRtcNetwork, RtcEvent, RtcEventType} from "../network/IWebRtcNetwork";
 import { MediaConfig } from "./MediaConfig";
 import { IFrameData } from "./RawFrame";
 
@@ -39,49 +40,18 @@ export enum MediaConfigurationState {
     Failed = 4
 }
 
-export enum MediaEventType
+
+export class StreamAddedEvent extends RtcEvent
 {
-    Invalid = 0,
-
-    StreamAdded = 20
-}
-
-/**
- * Will replace frame event / configuration system in the future.
- * 
- * So far it only delivers HTMLVideoElements once connection and
- * all tracks are ready and it plays.
- * 
- * This is all temporary and will be updated soon to handle
- * all events from configuration of local streams to frame updates and
- * renegotation.
- * 
- */
-export class MediaEvent
-{
-    private mEventType = MediaEventType.Invalid;
-    public get EventType()
-    {
-        return this.mEventType;
-    }
-
-    private mConnectionId = ConnectionId.INVALID;
-    public get ConnectionId()
-    {
-        return this.mConnectionId;
-    }
-
-
     private mArgs:any; 
     public get Args():any
     {
         return this.mArgs;
     }
 
-    public constructor(type:MediaEventType, id: ConnectionId, args:any)
+    public constructor(id: ConnectionId, args:any)
     {
-        this.mEventType = type;
-        this.mConnectionId = id;
+        super(RtcEventType.StreamAdded, id);
         this.mArgs = args;
     }
 }
@@ -100,8 +70,4 @@ export interface IMediaNetwork extends IWebRtcNetwork
     SetVolume(volume: number, id: ConnectionId): void;
     HasAudioTrack(id: ConnectionId): boolean;
     HasVideoTrack(id: ConnectionId): boolean;
-
-    //Only used for browser specific events for now
-    //Not part of the C# api yet.
-    DequeueMediaEvent(): MediaEvent;
 }

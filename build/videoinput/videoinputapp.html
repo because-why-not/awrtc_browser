@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <script src="../bundle/apps.js"></script>
+
+</head>
+<body>
+<!--- See videoinputapp.ts for typescript side. --->
+    <div id="videoinputapp1">
+        <h1>Callapp1:</h1>
+        URL to connect:
+        <p class="callapp_url">
+    
+        </p>
+        <input type="checkbox" name="audio" class="callapp_send_audio" checked autocomplete="off"> Audio
+        <input type="checkbox" name="video" class="callapp_send_video" checked autocomplete="off"> Video
+        <input type= "text" class="callapp_address" autocomplete="off">
+        <button class="callapp_button"> Join </button>
+        <div class="callapp_local_video">local video</div>
+        <div class="callapp_remote_video">remote video</div>
+    </div>
+	
+    test video generator:<br>
+    <canvas id="canvas1"> </canvas>
+    <script> 
+        apps.videoinputapp(document.querySelector("#videoinputapp1"), "#canvas1");
+    </script>
+</body>
+</html>

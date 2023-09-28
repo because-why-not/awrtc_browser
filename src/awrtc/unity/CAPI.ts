@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2019, because-why-not.com Limited
+Copyright (c) 2023, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -33,6 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import { SLog, WebRtcNetwork, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork, NetworkConfig, SLogger, WebRtcHelper } from "../network/index"
 import { MediaConfigurationState, MediaConfig } from "../media/index";
 import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media, VideoInputType } from "../media_browser/index";
+import { RtcEventType, StatsEvent } from "../network/IWebRtcNetwork";
 
 
 var CAPI_InitMode = {
@@ -312,7 +313,22 @@ export function CAPI_WebRtcNetwork_PeekEm(lIndex: number, lTypeIntArray: Int32Ar
 
     return true;
 }
+export function CAPI_WebRtcNetwork_RequestStats(lIndex: number) {
+    gCAPI_WebRtcNetwork_Instances[lIndex].RequestStats();
+}
+export function CAPI_WebRtcNetwork_DequeueRtcEvent(lIndex: number, lTypeIntArray: Int32Array, lTypeIntIndex: number, lConidIntArray: Int32Array, lConIntIndex: number) {
 
+    const evt = gCAPI_WebRtcNetwork_Instances[lIndex].DequeueRtcEvent();
+    if (evt && evt.EventType == RtcEventType.Stats) {
+        const stats = evt as StatsEvent;
+        lTypeIntArray[lTypeIntIndex] = stats.EventType;
+        lConidIntArray[lConIntIndex] = stats.ConnectionId.id;
+        const res = JSON.stringify(stats.Reports);
+        return res;
+    } else {
+        return null;
+    }
+}
 
 
 export function CAPI_MediaNetwork_IsAvailable(): boolean {
@@ -354,7 +370,8 @@ export function CAPI_MediaNetwork_Configure(lIndex: number, audio: boolean, vide
     minWidth: number, minHeight: number,
     maxWidth: number, maxHeight: number,
     idealWidth: number, idealHeight: number,
-    minFps: number, maxFps: number, idealFps: number, deviceName: string = "") {
+    minFps: number, maxFps: number, idealFps: number, deviceName: string = "",
+    videoCodecs: string[] = [], videoBitrateKbits: number = -1, videoContentHint: string = "") {
 
     let config: MediaConfig = new MediaConfig();
     config.Audio = audio;
@@ -371,6 +388,9 @@ export function CAPI_MediaNetwork_Configure(lIndex: number, audio: boolean, vide
     config.IdealFps = idealFps;
 
     config.VideoDeviceName = deviceName;
+    config.VideoCodecs = videoCodecs;
+    config.VideoBitrateKbits = videoBitrateKbits;
+    config.VideoContentHint = videoContentHint;
 
     config.FrameUpdates = true;
 
@@ -582,9 +602,9 @@ export function CAPI_VideoInput_UpdateFrame(name: string,
     }
     return Media.SharedInstance.VideoInput.UpdateFrame(name, dataPtrClamped, width, height, VideoInputType.ARGB, rotation, firstRowIsBottom);
 }
-export function CAPI_Media_EnableScreenCapture(name: string): void {
+export function CAPI_Media_EnableScreenCapture(name: string, captureAudio: true): void {
     
-    return Media.SharedInstance.EnableScreenCapture(name);
+    return Media.SharedInstance.EnableScreenCapture(name, captureAudio);
 }
 
 export function GetUnityCanvas(): HTMLCanvasElement {

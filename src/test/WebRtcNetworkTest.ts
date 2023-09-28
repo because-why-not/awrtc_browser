@@ -30,8 +30,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import { WebsocketTest } from "WebsocketNetworkTest";
 import { IBasicNetworkTest } from "helper/IBasicNetworkTest";
 import { NetworkEvent, IBasicNetwork, NetEventType, WebsocketNetwork,
-    ConnectionId, LocalNetwork, WebRtcNetwork, IWebRtcNetwork, NetworkConfig } 
+    ConnectionId, LocalNetwork, WebRtcNetwork, NetworkConfig } 
     from "../awrtc/index";
+import { IWebRtcNetwork } from "../awrtc/network/IWebRtcNetwork";
 
 export class WebRtcNetworkTest extends IBasicNetworkTest {
 

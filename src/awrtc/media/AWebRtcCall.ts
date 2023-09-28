@@ -28,14 +28,14 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { ICall } from "./ICall";
-import { IMediaNetwork, MediaConfigurationState, MediaEvent } from "./IMediaNetwork";
+import { IMediaNetwork, MediaConfigurationState, StreamAddedEvent } from "./IMediaNetwork";
 import { CallEventHandler, CallAcceptedEventArgs, CallEndedEventArgs, ErrorEventArgs, CallEventType, WaitForIncomingCallEventArgs, CallErrorType, DataMessageEventArgs, FrameUpdateEventArgs, CallEventArgs, MessageEventArgs, MediaUpdatedEventArgs } from "./CallEventArgs";
 import { SLog, Encoding } from "../network/Helper";
 import { NetworkConfig } from "../network/NetworkConfig";
 import { MediaConfig } from "./MediaConfig";
 import { ConnectionId, NetworkEvent, NetEventType } from "../network/index";
-import { BrowserMediaNetwork } from "../media_browser/BrowserMediaNetwork";
 import { IFrameData } from "./RawFrame";
+import { RtcEvent, RtcEventType, IWebRtcNetwork } from "../network/IWebRtcNetwork";
 
 class CallException {
     private mErrorMsg: string;
@@ -520,10 +520,10 @@ export class AWebRtcCall implements ICall {
             }
         }
 
-        let mediaEvent : MediaEvent= null;
-        while((mediaEvent = this.mNetwork.DequeueMediaEvent()) != null)
+        let rtcEvent : RtcEvent= null;
+        while((rtcEvent = this.mNetwork.DequeueRtcEvent()) != null)
         {
-            this.MediaEventToCallEvent(mediaEvent);
+            this.MediaEventToCallEvent(rtcEvent);
         }
 
         this.mNetwork.Flush();
@@ -534,13 +534,15 @@ export class AWebRtcCall implements ICall {
         let args = new FrameUpdateEventArgs(id, frame);
         this.TriggerCallEvent(args);
     }
-    private MediaEventToCallEvent(evt: MediaEvent)
+    private MediaEventToCallEvent(inevt: RtcEvent)
     {
-        let videoElement : HTMLVideoElement = null;
-        if(evt.EventType == evt.EventType)
+        if(inevt.EventType == RtcEventType.StreamAdded)
         {
+            const evt = inevt as StreamAddedEvent;
             let args = new MediaUpdatedEventArgs(evt.ConnectionId, evt.Args as HTMLVideoElement);
             this.TriggerCallEvent(args);
+        } else {
+            SLog.L("Event type " + RtcEventType[inevt.EventType] + " ignored.");
         }
     }
 
