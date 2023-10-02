@@ -1,106 +1,175 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
+
 <head>
-    <meta charset="utf-8" />
-    <title></title>
-    <script src="./bundle/apps.js"></script>
-    
-<style>
-.header { grid-area: hd; 
-  background-color: rgba(9, 7, 7, 1.0);
+  <meta charset="utf-8" />
+  <title></title>
+  <script src="./bundle/apps.js"></script>
 
-}
-.main { grid-area: ma; 
-  background-color: rgba(9, 7, 7, 1.0);
-  height: 100vh;
+  <style>
+    .header {
+      grid-area: hd;
+      background-color: rgba(9, 7, 7, 1.0);
 
-}
-.local { grid-area: ma; 
-    
-  width:20%;
-  height:20%;
-  align-self: end; /* bottom of column */
-  justify-self: end; /* right of row */
-  margin:1em;
-  /* background-color: rgba(9, 7, 7, 0);*/
-  background-color: rgba(255, 0, 0, 0);
-}
-.callapp_local_video{
-    width: 100%;
-    height: 100%;
-}
-.callapp_local_video > video{
-    transform: scaleX(-1);
-}
+    }
 
-.callapp_remote_video{
-    width: 100%;
-    height: 100%;
-}
+    .main {
+      grid-area: ma;
+      background-color: rgba(9, 7, 7, 1.0);
+      height: 100vh;
 
-.grid-container {
-  display: grid;
-  grid-template-areas:
-    'hd hd hd hd'
-    'ma ma ma ma'
-    'ma ma ma ma'
-    'ma ma ma ma';
-  gap: 5px;
-  background-color: #2d373f;
-  color: #d5d5d5;
-  padding: 10px;
-}
+    }
 
-.grid-container > div {
-  padding: 20px 0;
-  font-size: 20px;
-}
-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-    </style>
+    .local {
+      grid-area: ma;
+
+      width: 20%;
+      height: 20%;
+      align-self: end;
+      /* bottom of column */
+      justify-self: end;
+      /* right of row */
+      margin: 1em;
+      /* background-color: rgba(9, 7, 7, 0);*/
+      background-color: rgba(255, 0, 0, 0);
+    }
+
+    .callapp_local_video {
+      width: 100%;
+      height: 100%;
+    }
+
+    .callapp_local_video>video {
+      transform: scaleX(-1);
+    }
+
+    .callapp_remote_video {
+      width: 100%;
+      height: 100%;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-areas:
+        'hd hd hd hd'
+        'ma ma ma msg'
+        'ma ma ma msg'
+        'ma ma ma msg';
+      gap: 5px;
+      background-color: #2d373f;
+      color: #d5d5d5;
+      padding: 10px;
+    }
+
+    .grid-container>div {
+      padding: 20px 0;
+      font-size: 20px;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+
+
+    /* New styles for message area */
+    .messages {
+      grid-area: msg;
+      background-color: rgba(9, 7, 7, 1.0);
+      border-left: 1px solid #d5d5d5;
+      padding: 10px;
+    }
+
+    .message-list {
+      flex-grow: 1; 
+      height: calc(100vh - 100px);
+      /* Adjusted as per requirement */
+      overflow-y: auto;
+      /* This makes it scrollable when content overflows */
+      margin-bottom: 10px;
+      padding: 10px;
+      border-bottom: 1px solid #444;
+      /* Added a border for visual separation */
+    }
+
+    .message {
+      background-color: #444;
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 5px;
+      color: white;
+    }
+
+    .message-input {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .messageInput {
+      flex-grow: 1;
+      padding: 5px;
+      margin-right: 10px;
+    }
+
+    .sendButton {
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+  </style>
 </head>
+
 <body>
-    <div id="callapp1" class="grid-container">
-        <div class="header">
-            <h1>Callapp1:</h1>
-            URL to connect:
-            <p class="callapp_url">
-        
-            </p>
-            <input type="checkbox" name="audio" class="callapp_send_audio" checked autocomplete="off"> Audio
-            <input type="checkbox" name="video" class="callapp_send_video" checked autocomplete="off"> Video
-            <select name="video_devices" class="video_devices" >
-            </select>
-            <input type= "text" class="callapp_address" autocomplete="off">
-            <div class="resolution">
-                width: <input type="text" class="callapp_width" size="4" value="1280">  </input>
-                
-                height:<input type="text" class="callapp_height" size="4" value="720"> </input>
-            </div>
-            <button class="callapp_button"> Join </button>
-        </div>
-        <div class="main">
-            <div class="callapp_remote_video"></div>
-        </div>
-        <div class="local">
-            <div class="callapp_local_video"></div>
-        </div>
+  <div id="callapp1" class="grid-container">
+    <div class="header">
+      <h1>Callapp1:</h1>
+      URL to connect:
+      <p class="callapp_url">
+
+      </p>
+      <input type="checkbox" name="audio" class="callapp_send_audio" checked autocomplete="off"> Audio
+      <input type="checkbox" name="video" class="callapp_send_video" checked autocomplete="off"> Video
+      <select name="video_devices" class="video_devices">
+      </select>
+      <input type="text" class="callapp_address" autocomplete="off">
+      <div class="resolution">
+        width: <input type="text" class="callapp_width" size="4" value="1280"> </input>
+
+        height:<input type="text" class="callapp_height" size="4" value="720"> </input>
+      </div>
+      <button class="callapp_button"> Join </button>
     </div>
+    <div class="main">
+      <div class="callapp_remote_video"></div>
+    </div>
+    <div class="local">
+      <div class="callapp_local_video"></div>
+    </div>
+    <div class="messages">
+      <div class="message-list" class="messageList"></div>
+      <div class="message-input">
+        <input type="text" class="messageInput" placeholder="Type your message" />
+        <button class="sendButton">Send</button>
+      </div>
+    </div>
+  </div>
 
 
-    <script> 
+  <script>
 
-        apps.callapp(document.querySelector("#callapp1"));
-        const callapp2 = document.querySelector("#callapp1").cloneNode(true);
-        callapp2.id = "callapp2";
-        
-        callapp2.querySelector("h1").innerText = "Callapp2";
-        document.body.appendChild(callapp2);
-        apps.callapp(callapp2);
+    apps.callapp(document.querySelector("#callapp1"));
+    const callapp2 = document.querySelector("#callapp1").cloneNode(true);
+    callapp2.id = "callapp2";
 
-    </script>
+    callapp2.querySelector("h1").innerText = "Callapp2";
+    document.body.appendChild(callapp2);
+    apps.callapp(callapp2);
+
+
+
+  </script>
 </body>
+
 </html>
