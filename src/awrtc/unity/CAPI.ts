@@ -388,9 +388,19 @@ export function CAPI_MediaNetwork_Configure(lIndex: number, audio: boolean, vide
     config.IdealFps = idealFps;
 
     config.VideoDeviceName = deviceName;
-    config.VideoCodecs = videoCodecs;
-    config.VideoBitrateKbits = videoBitrateKbits;
-    config.VideoContentHint = videoContentHint;
+
+    
+    if(videoCodecs && videoCodecs.length > 0)
+        config.VideoCodecs = videoCodecs;
+
+    //the API between C# and JS does not support null or optional values
+    //avoid setting any invalid values and use the default java script values instead
+    if(videoBitrateKbits > 0)
+        config.VideoBitrateKbits = videoBitrateKbits;
+    
+    //Will keep the value at null if the C api sets ""
+    if(videoContentHint)
+        config.VideoContentHint = videoContentHint;
 
     config.FrameUpdates = true;
 

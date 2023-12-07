@@ -125,36 +125,32 @@ export class MediaPeer extends WebRtcDataPeer
         if (!sender || !sender.track) return;
 
         if (this.mMediaConfig.VideoBitrateKbits) {
-            
-            const params = sender.getParameters();
-            params.encodings[0].maxBitrate = this.mMediaConfig.VideoBitrateKbits * 1000;
-            
-            
-            await sender.setParameters(params);
+            try {
+                //Added verbose warnings here because Safari & mobile browsers appear to
+                //return some unusual values
+                const params = sender.getParameters();
+                if (!params) {
+                    this.log.LW("Unable to call VideoBitrateKbits. getParameters returned null");
+                }
+                if (!params.encodings) {
+                    this.log.LW("encodings was undefined. VideoBitrateKbits ignored.");
+                    return;
+                }
+                if (Array.isArray(params.encodings) === false) {
+                    this.log.LW("encodings was not an array. Setting VideoBitrateKbits ignored");
+                    return;
+                }
+                if (params.encodings.length === 0) {
+                    this.log.LW("encodings was empty. Setting VideoBitrateKbits ignored");
+                    return;
+                }
+                params.encodings[0].maxBitrate = this.mMediaConfig.VideoBitrateKbits * 1000;
+                await sender.setParameters(params);
+            } catch (err) {
+                this.log.LE("Setting VideoBitrateKbits failed with exception:");
+                this.log.LE(err);
+            }
         }
-        //TODO: priority for encoders & make sure
-        //all browsers work via content hint's and no
-        //degradationPreference is needed
-        /*
-        const height = sender.track.getSettings().height;
-        console.log("incoming height is: " + height);
-        const scaleRatio = 1;
-        if (!params.encodings) {
-          params.encodings = [{}];
-        }
-        params.degradationPreference = "maintain-resolution";
-        params.encodings[0].scaleResolutionDownBy = Math.max(scaleRatio, 1);
-        await sender.setParameters(params);
-      
-        // If the newly changed value of scaleResolutionDownBy is 1,
-        // use applyConstraints() to be sure the height is constrained,
-        // since scaleResolutionDownBy may not be implemented
-      
-        if (sender.getParameters().encodings[0].scaleResolutionDownBy === 1) {
-          await sender.track.applyConstraints({ height });
-        }
-        */
-
     }
 
     setVideoTransceiver(transceiver: RTCRtpTransceiver) {
