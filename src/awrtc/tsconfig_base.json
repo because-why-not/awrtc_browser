@@ -38,6 +38,8 @@
     "./media_browser/MediaPeer.ts",
     "./media_browser/VideoInput.ts",
     "./media_browser/Media.ts",
+    "./media_browser/AudioProcessor.ts",
+    "./media_browser/AutoplayResolver.ts",
     "./media_browser/index.ts",
     "./unity/CAPI.ts",
     "./unity/index.ts",

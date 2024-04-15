@@ -1,4 +1,4 @@
-import { DeviceApi } from "./DeviceApi";
+import { DeviceApi, MediaDevice } from "./DeviceApi";
 import { VideoInput } from "./VideoInput";
 import { MediaConfig } from "media/MediaConfig";
 
@@ -60,6 +60,13 @@ export class Media{
         return device_list;
     }
 
+    
+    public GetAudioInputDevices(): MediaDevice[] {
+        let device_list = DeviceApi.GetAudioInputDevices();        
+        return device_list;
+    }
+
+    
     public static IsNameSet(videoDeviceName: string) : boolean{
 
         if(videoDeviceName !== null && videoDeviceName !== "" )
@@ -76,15 +83,16 @@ export class Media{
         const result = new MediaStream();
         //first we check if the video device corresponds to a non physical camera
         if (configNeeded.Video && Media.IsNameSet(configNeeded.VideoDeviceName)) {
+            //a specific video device is requested.
             if (this.videoInput != null && this.videoInput.HasDevice(configNeeded.VideoDeviceName)) {
+                //we found a video input device that matches. add a track to it to the results
                 const videoInputStream = this.videoInput.GetStream(configNeeded.VideoDeviceName);
                 result.addTrack(videoInputStream.getVideoTracks()[0]);
                 configNeeded.Video = false;
 
             } else if (this.mAllowScreenCapture && configNeeded.VideoDeviceName === this.mScreenCaptureDevice) {
-
+                //we found a screen capture device that matches. add a track to it to the results
                 let constraints: any = {};
-                
                 if (configNeeded.IdealWidth <= 0 && configNeeded.IdealHeight <= 0 ) {
                     constraints.video = true;
                 } else {

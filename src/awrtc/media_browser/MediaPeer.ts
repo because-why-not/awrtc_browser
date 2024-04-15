@@ -377,9 +377,19 @@ export class MediaPeer extends WebRtcDataPeer
         if (atrack != null) {
             if (this.mAudioSender != null) {
                 //this.mAudioSender.setStreams(stream_container.Stream);
-                await this.mAudioSender.replaceTrack(atrack);
-                //TODO: set the transceiver direction to sendrecv?
-                //Check if this is needed in some cases
+                try{
+                    await this.mAudioSender.replaceTrack(atrack);
+                    const atransceiver = this.getTransceiverByKind("audio")
+                    if (atransceiver) {
+                        if (atransceiver.currentDirection != "sendrecv") {
+                            atransceiver.direction = "sendrecv";
+                        }
+                    } else {
+                        this.log.LW("Unable to find the audio transceiver to attach a new track. This indicates the peer is incorrectly configured.");
+                    }
+                } catch (err) {
+                    this.log.LE("Error during replaceTrack: " + err);
+                }
             } else {
                 //no sender yet but a track is suppose to be attached -> create one
                 //this does create a transceiver set to "sendrecv"
@@ -404,6 +414,14 @@ export class MediaPeer extends WebRtcDataPeer
                 //this.mVideoSender.setStreams(stream_container.Stream);
                 try {
                     await this.mVideoSender.replaceTrack(vtrack);
+                    
+                    const vtransceiver = this.getTransceiverByKind("video")
+                    if (vtransceiver) {
+                        if(vtransceiver.currentDirection != "sendrecv")
+                            vtransceiver.direction = "sendrecv";
+                    } else {
+                        SLog.LW("Unable to find the video transceiver to attach a new track. This indicates the peer is incorrectly configured.");
+                    }
                 } catch (err) {
                     this.log.LE("Error during replaceTrack: " + err);
                 }
@@ -466,6 +484,10 @@ export class MediaPeer extends WebRtcDataPeer
     public SetVolume(volume: number): void {
         if (this.mRemoteStream != null)
             this.mRemoteStream.SetVolume(volume);
+    }
+    public SetVolumePan(volume: number, pan: number): void {
+        if (this.mRemoteStream != null)
+            this.mRemoteStream.SetVolumePan(volume, pan);
     }
 
     public HasAudioTrack(): boolean {

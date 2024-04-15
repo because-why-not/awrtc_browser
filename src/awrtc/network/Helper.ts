@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2019, because-why-not.com Limited
+Copyright (c) 2023, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -236,6 +236,28 @@ export enum SLogLevel
 export class SLog {
 
     private static sLogLevel: SLogLevel = SLogLevel.Warnings;
+    private static timePrefixEnabled: boolean = false;
+    private static startTime: number;
+
+    // Method to set the time prefix feature state
+    public static SetTimePrefix(enabled: boolean) {
+        SLog.timePrefixEnabled = enabled;
+        if (enabled) {
+            SLog.startTime = Date.now(); // Set the start time when enabling
+        } else {
+            SLog.startTime = null; // Reset the start time when disabling
+        }
+    }
+    // Method to format log message with time prefix if enabled
+    private static formatMessage(msg: any): string {
+        if (SLog.timePrefixEnabled) {
+            let currentTime = Date.now();
+            let timeElapsed = currentTime - SLog.startTime;
+            return `[${timeElapsed} ms] ${msg}`;
+        } else {
+            return msg;
+        }
+    }
 
     public static SetLogLevel(level: SLogLevel)
     {
@@ -249,7 +271,7 @@ export class SLog {
     }
 
 
-    public static L(msg: any, tag?:string): void {
+    public static L(msg: any, tag?: string): void {
         SLog.Log(msg, tag);
     }
     public static LW(msg: any, tag?:string): void {
@@ -262,6 +284,7 @@ export class SLog {
         
         if(SLog.sLogLevel <= SLogLevel.Info)
         {
+            msg = SLog.formatMessage(msg);
             if(tag)
             {
                 console.log(msg, tag);
@@ -275,6 +298,7 @@ export class SLog {
             tag = "";
         if(SLog.sLogLevel <= SLogLevel.Warnings)
         {
+            msg = SLog.formatMessage(msg);
             if(tag)
             {
                 console.warn(msg, tag);
@@ -285,9 +309,9 @@ export class SLog {
     }
 
     public static LogError(msg: any, tag?:string) {
-        
         if(SLog.sLogLevel <= SLogLevel.Errors)
         {
+            msg = SLog.formatMessage(msg);
             if(tag)
             {
                 console.error(msg, tag);
@@ -295,6 +319,5 @@ export class SLog {
                 console.error(msg);
             }
         }
-            
     }
 }

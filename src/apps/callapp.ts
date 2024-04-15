@@ -108,16 +108,11 @@ export class CallApp
     {
         if(this.mCall != null)
             this.Cleanup();
-        
-        this.mIsRunning = true;
-        this.Ui_OnStart()
-        console.log("start");
-        console.log("Using signaling server url: " + this.mNetConfig.SignalingUrl);
 
-        //create media configuration
         
         
-        this.mMediaConfig.VideoDeviceName = this.UI_GetVideoDevice(); 
+        this.UI_UiToValues();
+        
         
         /*
         this.mMediaConfig.VideoCodecs = ["H264", "VP9"];
@@ -125,10 +120,19 @@ export class CallApp
         this.mMediaConfig.VideoContentHint = "detail";
         */
         
+        this.mIsRunning = true;
+        
+        this.Ui_OnStart()
+        console.log("start");
+        console.log("Using signaling server url: " + this.mNetConfig.SignalingUrl);
+
+        //create media configuration
+        
+        
         //For usage in HTML set FrameUpdates to false and wait for  MediaUpdate to
         //get the VideoElement. By default awrtc would deliver frames individually
         //for use in Unity WebGL
-        console.log("requested config:" + JSON.stringify(this.mMediaConfig));
+        console.log("requesting config:" + JSON.stringify(this.mMediaConfig));
         //setup our high level call class.
         this.mCall = new awrtc.BrowserWebRtcCall(this.mNetConfig);
 
@@ -318,6 +322,7 @@ export class CallApp
     private mUiAudio: HTMLInputElement;
     private mUiVideo: HTMLInputElement;
     private mUiVideoDevices: HTMLSelectElement;
+    private mUiAudioInputDevices: HTMLSelectElement;
     private mUiWidth: HTMLInputElement;
     private mUiHeight: HTMLInputElement;
     private mUiButton: HTMLButtonElement;
@@ -333,27 +338,30 @@ export class CallApp
         
         let devname = "Screen capture";
         Media.SharedInstance.EnableScreenCapture(devname, true);
-        this.mMediaConfig.VideoDeviceName = devname;
 
         this.mUiAddress = parent.querySelector<HTMLInputElement>(".callapp_address");
         this.mUiAudio = parent.querySelector<HTMLInputElement>(".callapp_send_audio");
         this.mUiVideo = parent.querySelector<HTMLInputElement>(".callapp_send_video");
         this.mUiWidth =  parent.querySelector<HTMLInputElement>(".callapp_width");
         this.mUiHeight = parent.querySelector<HTMLInputElement>(".callapp_height");
-        this.mUiVideoDevices = parent.querySelector<HTMLSelectElement>(".video_devices");
-        this.UI_UpdateVideoDevices();
+        this.mUiVideoDevices = parent.querySelector<HTMLSelectElement>(".video_devices");        
+        this.mUiVideoDevices.addEventListener('change', () => {
+            this.UI_OnDeviceUpdate();
+        });
+        this.mUiAudioInputDevices = parent.querySelector<HTMLSelectElement>(".audio_input_devices");        
+        this.mUiAudioInputDevices.addEventListener('change', () => {
+            this.UI_OnDeviceUpdate();
+        });
+        this.UI_UpdateDevices();
 
         this.mUiUrl = parent.querySelector<HTMLParagraphElement>(".callapp_url");
-        this.mUiButton = parent.querySelector<HTMLInputElement>(".callapp_button");
+        this.mUiButton = parent.querySelector<HTMLButtonElement>(".callapp_button");
         this.mUiLocalVideoParent =  parent.querySelector<HTMLParagraphElement>(".callapp_local_video");
         this.mUiRemoteVideoParent =  parent.querySelector<HTMLParagraphElement>(".callapp_remote_video");
         this.mUiAudio.onclick = this.Ui_OnUpdate;
         this.mUiVideo.onclick = this.Ui_OnUpdate;
         this.mUiAddress.onkeyup = this.Ui_OnUpdate;
         this.mUiButton.onclick = this.Ui_OnStartStopButtonClicked;
-        this.mUiVideoDevices.addEventListener('change', () => {
-            this.UI_OnVideoDeviceUpdate();
-        });
         
         
         this.UI_ParameterToUi();
@@ -400,7 +408,7 @@ export class CallApp
             this.mUiRemoteVideoParent.removeChild(this.mUiRemoteVideoParent.firstChild);
         }
 
-        this.UI_UpdateVideoDevices();
+        this.UI_UpdateDevices();
     }
     private Ui_OnLog(msg:string){
 
@@ -443,7 +451,6 @@ export class CallApp
 
             this.Stop();
         }else{
-            this.UI_UiToValues();
             this.Start();
         }
 
@@ -467,29 +474,55 @@ export class CallApp
         this.mAutostart = this.GetParameterByName("autostart");
         this.mAutostart = this.tobool(this.mAutostart, false);
     }
+
+    private static UI_UpdateVideoSelect(devices: string[], select: HTMLSelectElement) {
+        
+        const selectedIndex = select.selectedIndex;
+        //clear
+        select.innerHTML = '';
+        
+        devices.forEach(x => {
+            const opt = document.createElement("option");
+            opt.text = x;
+            opt.value = x;
+            select.add(opt);
+        });
+        if(selectedIndex !== -1 && selectedIndex < select.options.length)
+        {
+            select.selectedIndex = selectedIndex;
+        } else {
+            select.selectedIndex = 0;
+        }
+    }
+    private static UI_UpdateSelect(devices: awrtc.MediaDevice[], select: HTMLSelectElement) {
+        
+        const selectedIndex = select.selectedIndex;
+        //clear
+        select.innerHTML = '';
+        
+        devices.forEach(x => {
+            const opt = document.createElement("option");
+            opt.text = x.Name;
+            opt.value = x.Id;
+            select.add(opt);
+        });
+        if(selectedIndex !== -1 && selectedIndex < select.options.length)
+        {
+            select.selectedIndex = selectedIndex;
+        } else {
+            select.selectedIndex = 0;
+        }
+    }
     
-    public UI_UpdateVideoDevices() {
+    public UI_UpdateDevices() {
         
         DeviceApi.UpdateAsync().then(() => { 
-
-            const selectedIndex = this.mUiVideoDevices.selectedIndex;
-            while(this.mUiVideoDevices.options.length > 0)
-                this.mUiVideoDevices.options[0].remove();
-            
             let devices = Media.SharedInstance.GetVideoDevices()
+            CallApp.UI_UpdateVideoSelect(devices, this.mUiVideoDevices);
 
-            devices.forEach(x => {
-                const opt = document.createElement("option");
-                opt.text = x;
-                opt.value = x;
-                this.mUiVideoDevices.add(opt);
-            });
-            if(selectedIndex !== -1 && selectedIndex < this.mUiVideoDevices.options.length)
-            {
-                this.mUiVideoDevices.selectedIndex = selectedIndex;
-            } else {
-                this.mUiVideoDevices.selectedIndex = 0;
-            }
+            let audioInputDevices = Media.SharedInstance.GetAudioInputDevices();
+            CallApp.UI_UpdateSelect(audioInputDevices, this.mUiAudioInputDevices);
+
         });
     }
     public UI_GetVideoDevice() : string{
@@ -499,13 +532,18 @@ export class CallApp
         const name = this.mUiVideoDevices.options[index].value;
         return name;
     }
-    private UI_OnVideoDeviceUpdate() {
-        const device = this.UI_GetVideoDevice();
+    private UI_OnDeviceUpdate() {
         if (this.mIsRunning) {
-            const newConfig = this.mMediaConfig.clone();
-            newConfig.VideoDeviceName = this.UI_GetVideoDevice();
-            this.Reconfigure(newConfig);
+            this.UI_UiToValues();
         }
+    }
+    
+    public UI_GetAudioInput() : string{
+        const index = this.mUiAudioInputDevices.selectedIndex;
+        if (index === -1 || index >= this.mUiAudioInputDevices.options.length)
+            return null;
+        const name = this.mUiAudioInputDevices.options[index].value;
+        return name;
     }
 
     //UI to values
@@ -532,6 +570,9 @@ export class CallApp
 
         newConfig.Audio  = this.mUiAudio.checked;
         newConfig.Video  = this.mUiVideo.checked;
+        newConfig.VideoDeviceName = this.UI_GetVideoDevice(); 
+        newConfig.AudioInputDevice = this.UI_GetAudioInput(); 
+
 
         newConfig.IdealWidth = this.UI_ParseRes(this.mUiWidth);
         newConfig.IdealHeight = this.UI_ParseRes(this.mUiHeight);
@@ -574,6 +615,28 @@ export class CallApp
     }
 }
 
+//We use this to test autoplay issues when used with Unity WebGL. In practise a browser app can just show a
+//button / UI
+function InitAutoplayWorkaround(){
+    console.log("registering handler");
+    let listener : ()=>void = null;
+    listener = ()=>{
+        awrtc.SLog.LW("Trying to resolve autoplay issues.");
+        //called during user input event
+        awrtc.AutoplayResolver.Resolve();
+        if (awrtc.AutoplayResolver.HasCompleted() === true) {
+            document.removeEventListener("click", listener);
+            document.removeEventListener("touchend", listener);
+        }
+    };
+    //If a stream runs into autoplay issues we add a listener for the next on click / touchstart event
+    //and resolve it on the next incoming event
+    awrtc.AutoplayResolver.onautoplayblocked = () => {
+        awrtc.SLog.LW("The browser blocked playback of a video stream.");
+        document.addEventListener("click", listener);
+        document.addEventListener("touchend", listener);
+    };
+}
 
 
 export function callapp(parent: HTMLElement)
@@ -590,5 +653,6 @@ export function callapp(parent: HTMLElement)
     awrtc.SLog.SetLogLevel(awrtc.SLogLevel.Info);
     callApp = new CallApp();
     callApp.setupUi(parent);
-
+    InitAutoplayWorkaround();
+    
 }

@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2019, because-why-not.com Limited
+Copyright (c) 2023, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -159,7 +159,7 @@ export class AWebRtcCall implements ICall {
     private MESSAGE_TYPE_CONTROL : number = 3;
 
     protected mNetworkConfig = new NetworkConfig();
-    private mMediaConfig: MediaConfig = null;
+    private mMediaConfig: MediaConfig = new MediaConfig();
 
     private mCallEventHandlers: Array<CallEventHandler> = [];
     public addEventListener(listener: CallEventHandler): void {
@@ -648,5 +648,15 @@ export class AWebRtcCall implements ICall {
     public Dispose() : void
     {
         this.DisposeInternal(true);
+    }
+    HasAudioTrack(remoteUserId: ConnectionId): boolean {
+        if (!this.mNetwork)
+            return false;
+        return this.mNetwork.HasAudioTrack(remoteUserId);
+    }
+    HasVideoTrack(remoteUserId: ConnectionId): boolean {
+        if (!this.mNetwork)
+            return false;
+        return this.mNetwork.HasVideoTrack(remoteUserId);
     }
 }

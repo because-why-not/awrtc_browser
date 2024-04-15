@@ -422,16 +422,17 @@ export class MediaNetworkTest{
             const sleeptime = 10;
             let waittime = 0;
             //fail if we didn't reach a successful test condition after this time
-            const timeout = 1000;
+            const connectionTimeout = 5000;
 
             let net1_to_net2: ConnectionId = ConnectionId.INVALID;
             let net2_to_net1: ConnectionId = ConnectionId.INVALID;
             let stats_event: StatsEvent = null;
 
-            let connected = false;
+            let connected1 = false;
+            let connected2 = false;
             //connect
             //let a few frames play and then request statistics
-            while (waittime < timeout && connected == false)
+            while (waittime < connectionTimeout && !(connected1 && connected2))
             {
                 net1.Update();
                 net2.Update();
@@ -442,14 +443,16 @@ export class MediaNetworkTest{
                     if (evt.Type == NetEventType.ServerInitialized) {
                         net1_to_net2 = evt.ConnectionId;
                         net2_to_net1 = net2.Connect(address);
-                    } else {
+                    } if (evt.Type == NetEventType.NewConnection) {
+                        connected1 = true;
+                    }else {
                         //fail?
                     }
                 }
                 while ((evt = net2.Dequeue()))
                 {
                     if (evt.Type == NetEventType.NewConnection) {
-                        connected = true;
+                        connected2 = true;
                     } else {
                         //fail?
                     }
@@ -466,10 +469,13 @@ export class MediaNetworkTest{
                 await sleep(sleeptime);
                 waittime += sleeptime;
             }
+            expect(waittime).withContext("Connection was not establish within timeout").toBeLessThan(connectionTimeout);
 
+            const statsTimeout = 5000;
+            waittime = 0;
 
             net1.RequestStats();
-            while (waittime < timeout)
+            while (waittime < statsTimeout)
             {
                 net1.Update();
                 net2.Update();
@@ -484,7 +490,7 @@ export class MediaNetworkTest{
                 await sleep(sleeptime);
                 waittime += sleeptime;
             }
-            expect(waittime).withContext("StatReports did not arrive within timeout").toBeLessThan(timeout);
+            expect(waittime).withContext("StatReports did not arrive within timeout").toBeLessThan(statsTimeout);
             expect(stats_event).withContext("Network 1 did not receive a stats event.").not.toBeNull();
             expect(stats_event.Reports.length).withContext("Network 1 did receive an event but it has no reports attached.").toBeGreaterThan(0);
 

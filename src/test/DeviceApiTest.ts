@@ -52,10 +52,10 @@ describe("DeviceApiTest", () => {
     function printall()
     {
         console.log("current DeviceApi.Devices:");
-        for(let k in DeviceApi.Devices)
+        for(let k in DeviceApi.VideoDevices)
         {
-            let v = DeviceApi.Devices[k];
-            console.log(v.deviceId + " defaultLabel:" + v.defaultLabel + " label:" + v.label + " guessed:" + v.isLabelGuessed);
+            let v = DeviceApi.VideoDevices[k];
+            console.log(v.Id + " defaultLabel:" + v.fallbackLabel + " label:" + v.Name + " guessed:" + v.isLabelGuessed);
         }
     }
 
@@ -65,14 +65,14 @@ describe("DeviceApiTest", () => {
         let update2complete = false;
 
         let deviceCount = 0;
-        expect(Object.keys(DeviceApi.Devices).length).toBe(0);
+        expect(Object.keys(DeviceApi.VideoDevices).length).toBe(0);
         //first without device labels
         let updatecall1 = ()=>{
             expect(update1complete).toBe(false);
             expect(update2complete).toBe(false);
             console.debug("updatecall1");
             printall();
-            let devices1 = DeviceApi.Devices;
+            let devices1 = DeviceApi.VideoDevices;
             deviceCount = Object.keys(devices1).length;
             expect(deviceCount).toBeGreaterThan(0);
             let key1 = Object.keys(devices1)[0];
@@ -107,17 +107,17 @@ describe("DeviceApiTest", () => {
                 expect(update2complete).toBe(false);
 
                 //sadly can't simulate fixed device names for testing
-                let devices2 = DeviceApi.Devices;
+                let devices2 = DeviceApi.VideoDevices;
                 expect(Object.keys(devices2).length).toBe(deviceCount);
                 let key2 = Object.keys(devices2)[0];
                 //should have original label now
-                expect(devices2[key1].label).not.toBe("videodevice 1");
+                expect(devices2[key1].Name).not.toBe("videodevice 1");
                 //and not be guessed anymore
                 expect(devices2[key1].isLabelGuessed).toBe(false, "Chrome fails this now. Likely due to file://. Check for better test setup");
                 update2complete = true;
 
                 DeviceApi.Reset();
-                expect(Object.keys(DeviceApi.Devices).length).toBe(0);
+                expect(Object.keys(DeviceApi.VideoDevices).length).toBe(0);
 
                 done();
             }
@@ -146,11 +146,11 @@ describe("DeviceApiTest", () => {
             expect(dev_length).not.toBe(0);
             expect(dev_length).toBe(Media.SharedInstance.GetVideoDevices().length);
             
-            let keys = Object.keys(DeviceApi.Devices);
+            let keys = Object.keys(DeviceApi.VideoDevices);
             let counter = 0;
             for(let k of keys)
             {
-                let expectedVal = DeviceApi.Devices[k].label;
+                let expectedVal = DeviceApi.VideoDevices[k].Name;
                 let actual = CAPI_Media_GetVideoDevices(counter);
 
                 expect(actual).toBe(expectedVal);

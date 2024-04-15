@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2023, because-why-not.com Limited
+Copyright (c) 2024, because-why-not.com Limited
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 import { SLog, WebRtcNetwork, NetworkEvent, ConnectionId, LocalNetwork, WebsocketNetwork, NetworkConfig, SLogger, WebRtcHelper } from "../network/index"
 import { MediaConfigurationState, MediaConfig } from "../media/index";
-import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media, VideoInputType } from "../media_browser/index";
+import { BrowserMediaStream, BrowserMediaNetwork, DeviceApi, BrowserWebRtcCall, Media, VideoInputType, AutoplayResolver } from "../media_browser/index";
 import { RtcEventType, StatsEvent } from "../network/IWebRtcNetwork";
 
 
@@ -86,6 +86,7 @@ export function CAPI_InitAsync(initmode, glctx, useAdapter) {
     }
 }
 
+
 function InitAutoplayWorkaround(){
     if(gCAPI_Canvas == null){
         SLog.LW("Autoplay workaround inactive. No canvas object known to register click & touch event handlers.");
@@ -95,14 +96,20 @@ function InitAutoplayWorkaround(){
     let listener : ()=>void = null;
     listener = ()=>{
         //called during user input event
-        BrowserMediaStream.ResolveAutoplay();
-        gCAPI_Canvas.removeEventListener("click", listener, false);
-        gCAPI_Canvas.removeEventListener("touchstart", listener, false);
+        AutoplayResolver.Resolve();
+        if (AutoplayResolver.HasCompleted() === true)
+        {
+            gCAPI_Canvas.removeEventListener("click", listener, false);
+            gCAPI_Canvas.removeEventListener("touchstart", listener, false);
+        }
     };
     //If a stream runs into autoplay issues we add a listener for the next on click / touchstart event
     //and resolve it on the next incoming event
-    BrowserMediaStream.onautoplayblocked = ()=>{
+    AutoplayResolver.onautoplayblocked = () => {
+        SLog.L("The browser blocked playback of a video stream. Trying to resolve this the next time the user interacts with the canvas");
         gCAPI_Canvas.addEventListener("click", listener, false);
+        //mobile devices don't appear to get the click event if unity is running. 
+        //iOS ignores the first touchstart event but continues autoplayback after the second event
         gCAPI_Canvas.addEventListener("touchstart", listener, false);
     };
 }
@@ -371,7 +378,8 @@ export function CAPI_MediaNetwork_Configure(lIndex: number, audio: boolean, vide
     maxWidth: number, maxHeight: number,
     idealWidth: number, idealHeight: number,
     minFps: number, maxFps: number, idealFps: number, deviceName: string = "",
-    videoCodecs: string[] = [], videoBitrateKbits: number = -1, videoContentHint: string = "") {
+    videoCodecs: string[] = [], videoBitrateKbits: number = -1, videoContentHint: string = "",
+    audioInputDevice: string = "") {
 
     let config: MediaConfig = new MediaConfig();
     config.Audio = audio;
@@ -401,6 +409,9 @@ export function CAPI_MediaNetwork_Configure(lIndex: number, audio: boolean, vide
     //Will keep the value at null if the C api sets ""
     if(videoContentHint)
         config.VideoContentHint = videoContentHint;
+
+    if (audioInputDevice)
+        config.AudioInputDevice = audioInputDevice;
 
     config.FrameUpdates = true;
 
@@ -534,6 +545,11 @@ export function CAPI_MediaNetwork_SetVolume(lIndex: number, volume: number, conn
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
     mediaNetwork.SetVolume(volume, new ConnectionId(connectionId));
 }
+export function CAPI_MediaNetwork_SetVolumePan(lIndex: number, volume: number, pan: number, connectionId: number): void {
+    
+    let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
+    mediaNetwork.SetVolumePan(volume, pan, new ConnectionId(connectionId));
+}
 
 export function CAPI_MediaNetwork_HasAudioTrack(lIndex: number, connectionId: number): boolean {
     let mediaNetwork = gCAPI_WebRtcNetwork_Instances[lIndex] as BrowserMediaNetwork;
@@ -575,7 +591,23 @@ export function CAPI_Media_GetVideoDevices(index: number): string {
         return devs[index];
     }
     else {
-        SLog.LE("Requested device with index " + index + " does not exist.");
+        SLog.LE("Requested video device with index " + index + " does not exist.");
+        //it needs to be "" to behave the same to the C++ API. std::string can't be null
+        return "";
+    }
+}
+
+
+export function CAPI_Media_GetAudioInputDevices_Length(): number {
+    return Media.SharedInstance.GetAudioInputDevices().length;
+}
+export function CAPI_Media_GetAudioInputDevices(index: number): string {
+    const devs = Media.SharedInstance.GetAudioInputDevices();
+    if (devs.length > index) {
+        return JSON.stringify(devs[index]);
+    }
+    else {
+        SLog.LE("Requested audio input device with index " + index + " does not exist.");
         //it needs to be "" to behave the same to the C++ API. std::string can't be null
         return "";
     }

@@ -27,6 +27,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+import { SLog, SLogLevel } from "../awrtc/network/Helper"
 export * from "./LocalNetworkTest"
 export * from "./WebRtcNetworkTest"
 export * from "./WebsocketNetworkTest"
@@ -37,4 +38,20 @@ export * from "./DeviceApiTest"
 export * from "./VideoInputTest"
 export * from "./MediaTest"
 export * from "./CAPITest"
+export * from "./HelperTest"
 
+console.log("Starting tests using info log level.");
+SLog.SetTimePrefix(true);
+SLog.SetLogLevel(SLogLevel.Info);
+// Define a custom reporter
+var customReporter = {
+    specStarted: function(result) {
+        console.log('Starting test:', result.fullName);
+    },
+    specDone: function (result) {
+        console.log('test', result.status,  ": " , result.description);
+    }
+};
+
+// Add the custom reporter to Jasmine
+jasmine.getEnv().addReporter(customReporter);

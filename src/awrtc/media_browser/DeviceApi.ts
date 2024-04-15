@@ -29,54 +29,175 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { SLog } from "../network/index";
 import { MediaConfig } from "media/MediaConfig";
-import { VideoInput } from "./VideoInput";
 
-export class DeviceInfo
+
+export class MediaDevice
 {
-    public deviceId:string = null;
-    public defaultLabel:string = null;
-    public label:string = null;
-    public isLabelGuessed:boolean = true;
+    //unique id
+    public Id: string = null;
+    //user readable name. Either defaultLabel or an exact name if available
+    public Name: string = null;
+}
+class DeviceInfoInternal extends MediaDevice
+{
+    //this is a guessed label for the device. e.g. videoinput 1 if full device information
+    //wasn't available yet. This will be kept the same even when MediaDevice.Name is updated
+    //to allow the UI to reuse old values
+    public fallbackLabel: string = null;
+    
+    //True if the label is a generic name. False if it contains an exact device name
+    public isLabelGuessed: boolean = true;
+    //type of the device
+    public kind: MediaDeviceKind;
 }
 
 export interface DeviceApiOnChanged {
     (): void;
 }
 
+//Dictionary to keep device information. Device id is returned as key
+//watch out: These must not contain audio and video input as browsers 
+//use the same id for a video and audio device
+type DeviceDictionary = { [id: string]: DeviceInfoInternal; };
+/**This keeps the device information we collected and
+ * allows addressing devices with just a string (not just an id) 
+ * to keep the API consistant with the other platforms that lack
+ * access to unique ID's.
+ */
+class DeviceDb {
+    public mDeviceInfo: DeviceDictionary = {};
+    public mDeviceCounter = 1;
+
+    
+    public get DeviceDict() : DeviceDictionary
+    {
+        return this.mDeviceInfo;
+    }
+
+    //Returns a string list of all device labels / names. 
+    //This is for the compatibility to old platforms (will be removed one day)
+    public GetDeviceLabels() : string[]
+    {
+        const labels = Object.values(this.mDeviceInfo).map((x)=> x.Name);
+        return labels;
+    }
+    //Returns a list of all devices with id and label. Replaces GetDeviceLabels
+    public GetDeviceList(): MediaDevice[]{
+        const devs = Object.values(this.mDeviceInfo);
+        return devs;
+    }
+    //Updates the internal device list. Keeps track of id, label and guessed labels in case the
+    //actual label is not known yet
+    public UpdateDeviceList(devices: MediaDeviceInfo[]) {
+        
+        let newDeviceInfo: DeviceDictionary = {};
+        for(let info of devices)
+        {
+            let newInfo = new DeviceInfoInternal();
+            newInfo.Id = info.deviceId;
+            newInfo.kind = info.kind;
+
+            let oldKnownInfo: DeviceInfoInternal = null;
+            //if we already know a device with that id get the info
+            if(newInfo.Id in this.mDeviceInfo)
+            {
+                oldKnownInfo = this.mDeviceInfo[newInfo.Id];
+            }
+
+            //reuse the old defaultLabel or create a new one
+            if(oldKnownInfo != null)
+            {
+                newInfo.fallbackLabel = oldKnownInfo.fallbackLabel;
+            }else
+            {
+                newInfo.fallbackLabel = info.kind  + " " + this.mDeviceCounter;
+                this.mDeviceCounter++;
+            }
+
+            //check if we know a proper label or got one this update
+            if(oldKnownInfo != null && oldKnownInfo.isLabelGuessed == false)
+            {
+                //we already have the label -> reuse it
+                newInfo.Name = oldKnownInfo.Name;
+                newInfo.isLabelGuessed = false;
+            }else if(info.label)
+            {
+                //we got a new label -> use this instead of the old one
+                newInfo.Name = info.label;
+                newInfo.isLabelGuessed = false;
+            }else{
+                //no known label -> use the fallback label we set earlier
+                newInfo.Name = newInfo.fallbackLabel;
+                newInfo.isLabelGuessed = true;
+            }
+            
+            newDeviceInfo[newInfo.Id] = newInfo;
+        }
+        
+        this.mDeviceInfo = newDeviceInfo;
+    }
+}
 export class DeviceApi
 {
+    static ENUM_FAILED = "Can't access mediaDevices or enumerateDevices";
+    
+    private static sVideoDeviceInfo: DeviceDb = new DeviceDb();
+    private static sAudioInputDeviceInfo: DeviceDb = new DeviceDb();
+    private static sAccessStream:MediaStream = null;
     private static sLastUpdate = 0;
+
+    /**
+     * Returns time in ms when the device list was last updated
+     */
     public static get LastUpdate() :number
     {
         return DeviceApi.sLastUpdate;
     }
-    public static get HasInfo()
+    /** True if the device list was updated at least once
+     * 
+     */
+    public static get HasInfo(): boolean
     {
         return DeviceApi.sLastUpdate > 0;
     }
 
     private static sIsPending = false;
+    /** True if a device list was requiested
+     * but the results are not yet available
+     */
     public static get IsPending(){
         return DeviceApi.sIsPending;
     }
 
     private static sLastError:string = null;
+    /** Returns the last error detected
+     * 
+     */
     private static get LastError()
     {
         return this.sLastError;
     }
 
 
-    private static sDeviceInfo: { [id: string] : DeviceInfo; } = {};
-    private static sVideoDeviceCounter = 1;
-    private static sAccessStream:MediaStream = null;
 
 
+    /**List of event handlers that are triggered when
+     * the device list was updated
+     */
     private static sUpdateEvents: Array<DeviceApiOnChanged> = [];
+    
+    /** Adds a new event handler
+     * 
+     * @param evt 
+     */
     public static AddOnChangedHandler(evt: DeviceApiOnChanged)
     {
         DeviceApi.sUpdateEvents.push(evt);
     }
+    /** Removes an event handler
+     * 
+     * @param evt 
+     */
     public static RemOnChangedHandler(evt: DeviceApiOnChanged)
     {
         let index = DeviceApi.sUpdateEvents.indexOf(evt);
@@ -102,60 +223,18 @@ export class DeviceApi
         }
     }
 
+
+
     private static InternalOnEnum = (devices:MediaDeviceInfo[])=>
     {
         DeviceApi.sIsPending = false;
         DeviceApi.sLastUpdate = new Date().getTime();
 
-        let newDeviceInfo: { [id: string] : DeviceInfo; } = {};
-        for(let info of devices)
-        {
-            if(info.kind != "videoinput")
-                continue;
-            let newInfo = new DeviceInfo();
-            newInfo.deviceId  = info.deviceId;
+        const videoInputDevices = devices.filter((x) => x.kind == "videoinput");
+        const audioInputDevices = devices.filter((x) => x.kind == "audioinput");
 
-            let knownInfo:DeviceInfo= null;
-            if(newInfo.deviceId in DeviceApi.Devices)
-            {
-                //known device. reuse the default label
-                knownInfo = DeviceApi.Devices[newInfo.deviceId];
-            }
-
-
-            //check if we gave this device a default label already
-            //this is used to identify it via a user readable name in case
-            //we update multiple times with proper labels / default labels
-            if(knownInfo != null)
-            {
-                newInfo.defaultLabel = knownInfo.defaultLabel;
-            }else
-            {
-                newInfo.defaultLabel = info.kind  + " " + DeviceApi.sVideoDeviceCounter;;
-                DeviceApi.sVideoDeviceCounter++;
-            }
-
-            //check if we know a proper label or got one this update
-            if(knownInfo != null && knownInfo.isLabelGuessed == false)
-            {
-                //already have one
-                newInfo.label = knownInfo.label;
-                newInfo.isLabelGuessed = false;
-            }else if(info.label)
-            {
-                //got a new one
-                newInfo.label = info.label;
-                newInfo.isLabelGuessed = false;
-            }else{
-                //no known label -> just use the default one
-                newInfo.label = newInfo.defaultLabel;
-                newInfo.isLabelGuessed = true;
-            }
-            
-            newDeviceInfo[newInfo.deviceId] = newInfo;
-        }
-
-        DeviceApi.sDeviceInfo = newDeviceInfo;
+        DeviceApi.sVideoDeviceInfo.UpdateDeviceList(videoInputDevices);
+        DeviceApi.sAudioInputDeviceInfo.UpdateDeviceList(audioInputDevices);
 
         if(DeviceApi.sAccessStream)
         {
@@ -168,25 +247,29 @@ export class DeviceApi
         DeviceApi.TriggerChangedEvent();
     }
 
-    public static get Devices()
+    public static get VideoDevices() : DeviceDictionary
     {
-        return DeviceApi.sDeviceInfo;
+        return DeviceApi.sVideoDeviceInfo.DeviceDict;
     }
-
 
     public static GetVideoDevices(): string[]{
-        const devices = DeviceApi.Devices;
-        const keys = Object.keys(devices);
-        const labels = keys.map((x)=>{return devices[x].label});
-        
-        return labels;
+        return DeviceApi.sVideoDeviceInfo.GetDeviceLabels();
     }
+
+    public static GetVideoInputDevices(): MediaDevice[]{
+        return DeviceApi.sVideoDeviceInfo.GetDeviceList();
+    }
+    public static GetAudioInputDevices(): MediaDevice[]{
+        return DeviceApi.sAudioInputDeviceInfo.GetDeviceList();
+    }
+    
+
     public static Reset()
     {
         DeviceApi.sUpdateEvents = [];
         DeviceApi.sLastUpdate = 0;
-        DeviceApi.sDeviceInfo = {};
-        DeviceApi.sVideoDeviceCounter = 1;
+        DeviceApi.sVideoDeviceInfo = new DeviceDb();
+        DeviceApi.sAudioInputDeviceInfo = new DeviceDb();
         DeviceApi.sAccessStream = null;
         DeviceApi.sLastError = null;
         DeviceApi.sIsPending = false;
@@ -210,7 +293,6 @@ export class DeviceApi
         DeviceApi.Update();
     }
 
-    static ENUM_FAILED = "Can't access mediaDevices or enumerateDevices";
     /**Updates the device list based on the current
      * access. Gives the devices numbers if the name isn't known.
      */
@@ -227,6 +309,11 @@ export class DeviceApi
             DeviceApi.InternalOnErrorString(DeviceApi.ENUM_FAILED);
         }
     }
+    /**Updates the device list and allows to wait until the results
+     * are available
+     * 
+     * @returns 
+     */
     public static async UpdateAsync():Promise<void>
     {
         return new Promise<void>((resolve, fail)=>{
@@ -278,12 +365,12 @@ export class DeviceApi
 
     public static GetDeviceId(label:string):string {
 
-        let devs = DeviceApi.Devices;
+        let devs = DeviceApi.VideoDevices;
         for (var key in devs) {
             let dev = devs[key];
-            if(dev.label == label || dev.defaultLabel == label || dev.deviceId == label){
+            if(dev.Name == label || dev.fallbackLabel == label || dev.Id == label){
 
-                return dev.deviceId; 
+                return dev.Id; 
             }
         }
         return null;
@@ -296,19 +383,16 @@ export class DeviceApi
         return false;
     }
     
-
+    //translates our cross-platform MediaConfig to MediaStreamConstraints
     public static ToConstraints(config: MediaConfig): MediaStreamConstraints
     {
-        //ugly part starts -> call get user media data (no typescript support)
-        //different browsers have different calls...
-
-        //check  getSupportedConstraints()??? 
-        //see https://w3c.github.io/mediacapture-main/getusermedia.html#constrainable-interface
-
-        //set default ideal to very common low 320x240 to avoid overloading weak computers
+        
         var constraints = {
             audio: config.Audio
         } as any;
+        if (config.Audio && config.AudioInputDevice) {
+            constraints.audio = {deviceId: {exact:config.AudioInputDevice}};
+        }
 
 
         
@@ -397,15 +481,44 @@ export class DeviceApi
         constraints.video = video;
         return constraints;
     }
-
+    
     public static async getBrowserUserMedia(constraints?: MediaStreamConstraints): Promise<MediaStream>{
 
+        /**There appears to be a Chrome big in version 121 and likely earlier. 
+         * that triggers an exception "DOMException: Could not start video source"
+         * when used with our default values on the first attempt when vising a webpage. 
+         * 
+         * Reproduce with:
+        setTimeout(async () => {
+            await navigator.mediaDevices.getUserMedia(
+                {
+                    audio: true,
+                    video:
+                    {
+                        width:
+                        {
+                            ideal: 1280
+                        },
+                        height:
+                        {
+                            ideal: 720
+                        }
+                    }
+                })
+        }, 1);
+            happens only if the default video device does not support a resolution of 1280x720
+            It works fine on the second attempt after the user allowed camera and we can
+            attach a deviceId to the constraints.
+         */
         const res = await navigator.mediaDevices.getUserMedia(constraints);
         //after calling getUserMedia the browsers give us more accurate device names
         //buffer names now for any future synchronous access
         DeviceApi.Update();
         return res;
     }
+
+    //similar to the browsers user media but with some added workarounds to
+    //support cross platform compatibility (e.g. using -1 for unset values)
     public static async getAssetUserMedia(config: MediaConfig): Promise<MediaStream>{
         
         const constraints = DeviceApi.ToConstraints(config);

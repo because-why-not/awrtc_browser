@@ -60,6 +60,15 @@ export class MediaConfig {
         this.mVideoDeviceName = value;
     }
 
+    
+    private mAudioInputDevice : string = "";
+    public get AudioInputDevice(): string {
+        return this.mAudioInputDevice;
+    }
+    public set AudioInputDevice(value: string) {
+        this.mAudioInputDevice = value;
+    }
+
     private mMinWidth = -1;
     public get MinWidth(): number {
         return this.mMinWidth;

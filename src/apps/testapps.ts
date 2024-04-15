@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import * as awrtc from "../awrtc/index"
 import {DefaultValues, GetRandomKey} from "./apphelpers"
-import { DeviceApi, DeviceInfo, BrowserMediaStream, SLog, SLogLevel, WebRtcHelper } from "../awrtc/index";
+import { SLog, SLogLevel, WebRtcHelper } from "../awrtc/index";
 
 //This file only contains badly maintained
 //test apps. Use only experimentation. 
@@ -377,7 +377,7 @@ function BrowserMediaNetwork_TestLocalCameraInternal() {
     mediaConfig.Video = true;
 
     //test setting a specifid device here
-    let keys = Object.keys(awrtc.DeviceApi.Devices);
+    let keys = Object.keys(awrtc.DeviceApi.VideoDevices);
     mediaConfig.VideoDeviceName = "";//awrtc.DeviceApi.Devices[keys[0]].label;
 
 

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+
+    <h1>Audio Record and Playback Example</h1>
+
+    <button onclick="start()" id="buttonStart">Start Recording</button>
+    <button onclick="stopRecording()" id="buttonStop" disabled>Stop Recording</button>
+    <br><br>
+    <video id="audioPlayback" controls></video>
+    <video id="audioPlayback2" controls></video>
+    
+
+
+    <script>
+
+        const buttonStart = document.getElementById('buttonStart');
+        const buttonStop = document.getElementById('buttonStop');
+        const audioPlayback = document.getElementById('audioPlayback');
+        const audioPlayback2 = document.getElementById('audioPlayback2');
+
+
+
+        function createPanningControl() {
+            // Create the input element
+            const input = document.createElement('input');
+
+            // Set attributes
+            input.className = 'panning-control';
+            input.type = 'range';
+            input.min = '-1';
+            input.max = '1';
+            input.step = '0.1';
+            input.value = '0';
+
+            // Append the input to the body or any other desired parent element
+            document.body.appendChild(input); // Change 'document.body' if you want to append to another element
+            return input;
+        }
+
+
+
+
+        async function getInput() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1},
+                video: true });
+            return stream;
+        }
+
+        function outputStreamToPlayer(stream) {
+
+            audioPlayback.srcObject = stream;
+            audioPlayback.onloadedmetadata = (e) => {
+                audioPlayback.play();
+            };
+        }
+        function outputStreamToPlayerWorkaround(stream) {
+
+            audioPlayback2.srcObject = stream;
+            audioPlayback2.onloadedmetadata = (e) => {
+                audioPlayback2.play();
+                audioPlayback2.muted = true;
+            };
+        }
+
+        function outputToAudioContext(stream) {
+            source.connect(audioCtx.destination);
+        }
+
+        //adds another video element to play the received audio track without processing
+        const CHROME_BUG_WORKAROUND = true;        
+
+        /**This takes the audio track from the input stream and feeds it though a
+         * Panner node, then outputs it via a new MediaStream that is returned
+         */
+        function injectPanner(instream) {
+
+            //context required for the panner to function (we still output via an HTMLVideoElement later not directly to
+            //the context)
+            const audioCtx = new AudioContext();
+
+            //bridges MediaStream to AudioNode for WebAudio API
+            const source = audioCtx.createMediaStreamSource(instream);
+
+            // Create a stereo panner that processes our audio
+            let panNode = new StereoPannerNode(audioCtx);
+
+            const panningControl = createPanningControl() ;
+            // changes panning based on ui
+            panningControl.oninput = () => {
+                panNode.pan.value = panningControl.value;
+            };
+
+            //moves audio from input stream to the panner
+            source.connect(panNode);
+            //for testing outputs panner audio directly
+            //panNode.connect(audioCtx.destination);
+
+            // stream destination to convert back to a MediaStream
+            const mediaStreamDestination = audioCtx.createMediaStreamDestination();
+            panNode.connect(mediaStreamDestination);
+
+            //Create a new stream that adds our video track back in as well
+            const stream = new MediaStream();
+            stream.addTrack(mediaStreamDestination.stream.getAudioTracks()[0]);
+            stream.addTrack(instream.getVideoTracks()[0]);
+
+            //return track should work the same as our input track but with panning applied
+            return stream;
+        }
+
+        async function connectStream(instream){
+            const peer1 = new RTCPeerConnection();
+            const peer2 = new RTCPeerConnection();
+            peer2.oniceconnectionstatechange = (e) => console.log(peer2.iceConnectionState);
+            peer1.onicecandidate = (e) => peer2.addIceCandidate(e.candidate);
+            peer2.onicecandidate = (e) => peer1.addIceCandidate(e.candidate);
+            let stream = new MediaStream();
+            peer2.ontrack = (e) => stream.addTrack(e.track);
+            peer1.addTrack(instream.getAudioTracks()[0], instream);
+            peer1.addTrack(instream.getVideoTracks()[0], instream);
+            const offer = await peer1.createOffer();
+            await peer1.setLocalDescription(offer);
+            await peer2.setRemoteDescription(offer);
+            const answer = await peer2.createAnswer();
+            await peer2.setLocalDescription(answer);
+            await peer1.setRemoteDescription(answer);
+
+            return stream;
+
+
+        }
+        function start() {
+
+            setTimeout(async () => {
+
+                const instream = await getInput();
+                //outputs the microphone without processing for testing
+                //outputStreamToPlayer(instream);
+                const recstream = await connectStream(instream);
+                //outputStreamToPlayer(recstream);
+
+                //This fixes the chrome bug. We must replay the track we receive otherwise
+                //it isn't send to WebAudio API
+                if(CHROME_BUG_WORKAROUND)
+                    outputStreamToPlayerWorkaround(recstream);
+
+                //creates the panner and returns a new stream that gets the processed audio
+                setTimeout(() => {
+                    console.log("starting panner");
+                    const stream = injectPanner(recstream);
+                    outputStreamToPlayer(stream);
+                    
+                }, 1000)
+
+            }, 1)
+        }
+    </script>
+
+</body>
+
+</html>

@@ -28,7 +28,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import { NetworkEvent, WebsocketNetwork, NetEventType, 
-    WebsocketConnectionStatus, ConnectionId, IBasicNetwork } 
+    WebsocketConnectionStatus, ConnectionId, IBasicNetwork, SLog } 
     from "../awrtc/index";
 import { IBasicNetworkTest } from "helper/IBasicNetworkTest";
 
@@ -53,6 +53,8 @@ export class WebsocketTest extends IBasicNetworkTest {
 
         beforeEach(() => {
             this.mUrl = WebsocketTest.sUrl;
+            jasmine.DEFAULT_TIMEOUT_INTERVAL = 20000;
+
         });
 
         //can only be done manually so far
@@ -203,6 +205,7 @@ export class WebsocketTest extends IBasicNetworkTest {
             var cltToSrvId: ConnectionId;
             var evt: NetworkEvent;
 
+            SLog.L("Creating and connecting two peers.");
             this.thenAsync((finished) => {
                 this._CreateServerClient((rsrv, raddress, rsrvToCltId, rclt, rcltToSrvId) => {
                     srv = rsrv as WebsocketNetwork;
@@ -214,12 +217,13 @@ export class WebsocketTest extends IBasicNetworkTest {
                 });
             });
 
+            SLog.L("Waiting for the connection to be established");
             this.thenAsync((finished) => {
 
                 //both should be connected
                 expect(srv.getStatus()).toBe(WebsocketConnectionStatus.Connected);
                 expect(clt.getStatus()).toBe(WebsocketConnectionStatus.Connected);
-
+                SLog.L("Peers connected successfully. Calling Disconnect");
 
                 srv.Disconnect(srvToCltId);
                 this.waitForEvent(srv, finished);
@@ -230,9 +234,11 @@ export class WebsocketTest extends IBasicNetworkTest {
                 evt = srv.Dequeue();
                 expect(evt).not.toBeNull();
                 expect(evt.Type).toBe(NetEventType.Disconnected);
-
+                
+                SLog.L("Peers connected successfully. Calling Disconnect");
                 this.waitForEvent(clt, finished);
             });
+
             this.thenAsync((finished) => {
                 evt = clt.Dequeue();
                 expect(evt).not.toBeNull();
@@ -242,7 +248,8 @@ export class WebsocketTest extends IBasicNetworkTest {
                 //after disconnect the client doesn't have any active connections -> expect disconnected
                 expect(srv.getStatus()).toBe(WebsocketConnectionStatus.Connected);
                 expect(clt.getStatus()).toBe(WebsocketConnectionStatus.NotConnected);
-
+                
+                SLog.L("Disconnected event received. Stopping server");
                 srv.StopServer();
                 this.waitForEvent(srv, finished);
             });
@@ -253,6 +260,7 @@ export class WebsocketTest extends IBasicNetworkTest {
                 expect(evt.Type).toBe(NetEventType.ServerClosed);
                 expect(srv.getStatus()).toBe(WebsocketConnectionStatus.NotConnected);
 
+                SLog.L("Server stopped. Restarting server");
                 srv.StartServer(address);
                 this.waitForEvent(srv, finished);
             });
@@ -261,8 +269,11 @@ export class WebsocketTest extends IBasicNetworkTest {
                 evt = srv.Dequeue();
                 expect(evt).not.toBeNull();
                 expect(evt.Type).toBe(NetEventType.ServerInitialized);
+                SLog.L("Server ServerInitialized received");
 
                 this._Connect(srv, address, clt, (srvToCltIdOut, cltToSrvIdOut) => {
+                    
+                    SLog.L("Second connection succeeded");
                     finished();
                 });
             });

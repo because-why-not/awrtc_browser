@@ -270,6 +270,16 @@ export class BrowserMediaNetwork extends WebRtcNetwork implements IMediaNetwork 
             return peer.SetVolume(volume);
         }
     }
+
+    public SetVolumePan(volume: number, pan: number, id: ConnectionId): void {
+
+        SLog.L("SetVolumePan called. Volume: " + volume + "pan: " + pan + " id: " + id.id);
+        let peer = this.IdToConnection[id.id] as MediaPeer;
+        if (peer != null) {
+            return peer.SetVolumePan(volume, pan);
+        }
+    }
+    
     /** Allows to check if a specific peer has a remote
      * audio track attached. 
      * 
